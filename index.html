@@ -1,0 +1,2272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>SnowSafe · GTA Winter Driving Safety</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        /* GPU 加速缩放 + 深色背景防止瓦片加载时闪白 */
+        .leaflet-container { background: #1a1a2e !important; }
+        .leaflet-tile-pane { background: #1a1a2e; }
+        .leaflet-zoom-animated { will-change: transform; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a1628;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ===== 顶部状态栏 ===== */
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #1a237e, #0d47a1);
+            font-size: 13px;
+            height: 44px;
+        }
+        .status-bar .app-title {
+            font-weight: 700;
+            font-size: 15px;
+            color: #fff;
+        }
+        .status-bar .connection {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #4caf50;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.offline { background: #f44336; animation: none; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ===== 主内容区 ===== */
+        .main-content {
+            height: calc(100vh - 44px);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* ===== 地图区域 ===== */
+        .map-area {
+            flex: 1;
+            min-height: 200px;
+            background: #1a2332;
+            position: relative;
+            overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ===== 警告横幅 ===== */
+        .alert-banner {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #b71c1c, #d32f2f);
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            z-index: 100;
+            animation: slideDown 0.4s ease-out;
+            box-shadow: 0 4px 20px rgba(211, 47, 47, 0.5);
+        }
+        .alert-banner.active { display: flex; }
+        .alert-banner.moderate {
+            background: linear-gradient(135deg, #e65100, #ff9800);
+            box-shadow: 0 4px 20px rgba(255, 152, 0, 0.5);
+        }
+        .alert-icon {
+            font-size: 22px;
+            animation: shake 0.5s ease-in-out infinite;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-100%); }
+            to { transform: translateY(0); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: rotate(0); }
+            25% { transform: rotate(-10deg); }
+            75% { transform: rotate(10deg); }
+        }
+
+        /* ===== 信息卡片（紧凑版） ===== */
+        .info-panel {
+            background: linear-gradient(180deg, #1a2332, #0d1b2a);
+            padding: 10px 16px;
+            border-top: 1px solid #2a3a4a;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .location-info {
+            flex: 1;
+        }
+        .location-info .label {
+            font-size: 10px;
+            color: #78909c;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .location-info .value {
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            margin-top: 1px;
+        }
+
+        .risk-badge {
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .risk-badge.low { background: #1b5e20; color: #a5d6a7; }
+        .risk-badge.moderate { background: #e65100; color: #ffe0b2; }
+        .risk-badge.high { background: #b71c1c; color: #ffcdd2;
+                           animation: pulse 1.5s infinite; }
+
+        /* ===== 附近热点列表 ===== */
+        .nearby-section {
+            margin-top: 6px;
+        }
+        .nearby-title {
+            font-size: 10px;
+            color: #78909c;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .hotspot-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            background: #1a2a3a;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            border-left: 3px solid #f44336;
+        }
+        .hotspot-item .name {
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .hotspot-item .dist {
+            font-size: 11px;
+            color: #f44336;
+            font-weight: 600;
+        }
+        .hotspot-item .detail {
+            font-size: 10px;
+            color: #78909c;
+            margin-top: 1px;
+        }
+
+        /* ===== 控制栏（单行） ===== */
+        .controls {
+            display: flex;
+            gap: 6px;
+            padding: 8px 12px;
+            background: #0d1b2a;
+            border-top: 1px solid #2a3a4a;
+        }
+
+        .ctrl-btn {
+            flex: 1;
+            padding: 8px 4px;
+            border: none;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .ctrl-btn:active { transform: scale(0.96); }
+
+        /* ===== 通用开关样式 ===== */
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 4px 10px;
+            height: 30px;
+            cursor: pointer;
+            user-select: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .toggle-switch-label {
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .toggle-switch-track {
+            position: relative;
+            width: 32px;
+            height: 18px;
+            background: #37474f;
+            border-radius: 9px;
+            transition: background 0.3s;
+            flex-shrink: 0;
+        }
+        .toggle-switch-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            background: #b0bec5;
+            border-radius: 50%;
+            transition: transform 0.3s, background 0.3s;
+        }
+        .toggle-switch.active .toggle-switch-thumb {
+            transform: translateX(14px);
+            background: #fff;
+        }
+
+        /* Snow 开关 - 白蓝 */
+        .toggle-switch.snow-sw { border: 1px solid #3949ab; }
+        .toggle-switch.snow-sw .toggle-switch-label { color: #90caf9; }
+        .toggle-switch.snow-sw.active { border-color: #42a5f5; box-shadow: 0 0 12px rgba(66,165,245,0.3); }
+        .toggle-switch.snow-sw.active .toggle-switch-track { background: #1565c0; }
+
+        /* Heatmap 开关 - 紫 */
+        .toggle-switch.heat-sw { border: 1px solid #6a1b9a; }
+        .toggle-switch.heat-sw .toggle-switch-label { color: #ce93d8; }
+        .toggle-switch.heat-sw.active { border-color: #ce93d8; box-shadow: 0 0 12px rgba(206,147,216,0.3); }
+        .toggle-switch.heat-sw.active .toggle-switch-track { background: #8e24aa; }
+
+        /* Snowfall 开关 - 蓝 */
+        .toggle-switch.snowfall-sw { border: 1px solid #1565c0; }
+        .toggle-switch.snowfall-sw .toggle-switch-label { color: #90caf9; }
+        .toggle-switch.snowfall-sw.active { border-color: #64b5f6; box-shadow: 0 0 12px rgba(33,150,243,0.3); }
+        .toggle-switch.snowfall-sw.active .toggle-switch-track { background: #1e88e5; }
+
+        /* Weather 开关 - 绿 */
+        .toggle-switch.weather-sw { border: 1px solid #2e7d32; }
+        .toggle-switch.weather-sw .toggle-switch-label { color: #a5d6a7; }
+        .toggle-switch.weather-sw.active { border-color: #66bb6a; box-shadow: 0 0 12px rgba(76,175,80,0.3); }
+        .toggle-switch.weather-sw.active .toggle-switch-track { background: #43a047; }
+
+        .toggle-switch.collisions-sw { border: 1px solid #c62828; }
+        .toggle-switch.collisions-sw .toggle-switch-label { color: #ef9a9a; }
+        .toggle-switch.collisions-sw.active { border-color: #ef5350; box-shadow: 0 0 12px rgba(239,83,80,0.3); }
+        .toggle-switch.collisions-sw.active .toggle-switch-track { background: #e53935; }
+
+        .ctrl-btn.simulate {
+            background: #1b5e20;
+            color: #a5d6a7;
+            border: 1px solid #2e7d32;
+        }
+        .ctrl-btn.simulate.active {
+            background: linear-gradient(135deg, #2e7d32, #43a047);
+            color: #fff;
+            box-shadow: 0 0 12px rgba(76, 175, 80, 0.3);
+        }
+
+        /* 降雪面板 */
+        .snowfall-panel {
+            display: none;
+            padding: 8px 12px;
+            background: #0d1b2a;
+            border-top: 1px solid #1a2a3a;
+        }
+        .snowfall-panel.active { display: block; }
+        .snowfall-info {
+            color: #90caf9;
+            font-size: 12px;
+            margin-bottom: 6px;
+        }
+        .snowfall-year-row {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+        }
+        .snowfall-yr-btn {
+            padding: 4px 8px;
+            border: 1px solid #1565c0;
+            border-radius: 6px;
+            background: #0d2137;
+            color: #90caf9;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .snowfall-yr-btn.active {
+            background: #1565c0;
+            color: #fff;
+        }
+        .snowfall-month-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }
+        .snowfall-m-btn {
+            padding: 5px 2px;
+            border: 1px solid #1a3a5a;
+            border-radius: 6px;
+            background: #0d2137;
+            color: #b0bec5;
+            font-size: 11px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .snowfall-m-btn.active {
+            background: #1e88e5;
+            color: #fff;
+            border-color: #64b5f6;
+        }
+        .snowfall-m-btn.zero { opacity: 0.4; }
+
+        /* ===== 天气预警弹窗 ===== */
+        .weather-alert-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 9999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s ease;
+        }
+        .weather-alert-overlay.active { display: flex; }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .weather-alert-card {
+            background: #0d1b2a;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 360px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            animation: slideUp 0.4s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .weather-alert-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        .weather-alert-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .weather-alert-details {
+            font-size: 13px;
+            color: #90a4ae;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        .weather-alert-details .highlight {
+            color: #ef5350;
+            font-weight: 600;
+        }
+        .weather-alert-details .warn {
+            color: #ffa726;
+            font-weight: 600;
+        }
+        .weather-alert-details .info-val {
+            color: #e0e0e0;
+            font-weight: 500;
+        }
+        .weather-alert-btn {
+            padding: 10px 32px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            color: #fff;
+            margin: 0 4px;
+        }
+        .weather-alert-btn.primary {
+            background: #1565c0;
+        }
+        .weather-alert-btn.primary:hover { background: #1976d2; }
+        .weather-alert-btn.secondary {
+            background: #37474f;
+        }
+        .weather-alert-btn.secondary:hover { background: #455a64; }
+
+        /* 天气状态栏指示器 */
+        .weather-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .weather-indicator.clear {
+            background: rgba(76,175,80,0.15);
+            color: #81c784;
+        }
+        .weather-indicator.moderate {
+            background: rgba(255,152,0,0.2);
+            color: #ffb74d;
+        }
+        .weather-indicator.severe {
+            background: rgba(244,67,54,0.2);
+            color: #ef5350;
+            animation: pulse 2s infinite;
+        }
+        .weather-indicator.loading {
+            background: rgba(33,150,243,0.15);
+            color: #64b5f6;
+        }
+        .weather-indicator .wi-icon { font-size: 14px; }
+        .weather-indicator .wi-text { white-space: nowrap; }
+
+        .ctrl-btn.locate-btn {
+            background: #263238;
+            color: #78909c;
+            border: 1px solid #37474f;
+        }
+        .ctrl-btn.locate-btn:active {
+            background: #37474f;
+            color: #b0bec5;
+        }
+
+        /* ===== 模拟路线选择 ===== */
+        .sim-routes {
+            display: none;
+            padding: 0 12px 8px;
+            background: #0d1b2a;
+        }
+        .sim-routes.active { display: block; }
+        .sim-routes select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            background: #1a2a3a;
+            color: #e0e0e0;
+            border: 1px solid #2a3a4a;
+            font-size: 13px;
+        }
+
+        /* ===== 加载动画 ===== */
+        .loading-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(10, 22, 40, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+        .loading-overlay.hidden { display: none; }
+        .spinner {
+            width: 36px; height: 36px;
+            border: 3px solid #2a3a4a;
+            border-top-color: #42a5f5;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text {
+            margin-top: 12px;
+            color: #78909c;
+            font-size: 13px;
+        }
+
+        /* ===== Leaflet tooltip 样式 ===== */
+        .city-tooltip {
+            background: rgba(26, 35, 50, 0.85) !important;
+            color: #90caf9 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            font-size: 11px !important;
+            padding: 2px 6px !important;
+        }
+        .city-tooltip::before {
+            border-top-color: rgba(26, 35, 50, 0.85) !important;
+        }
+    </style>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+</head>
+<body>
+
+    <!-- 天气预警弹窗 -->
+    <div class="weather-alert-overlay" id="weatherOverlay">
+        <div class="weather-alert-card">
+            <div class="weather-alert-icon" id="weatherAlertIcon">⚠️</div>
+            <div class="weather-alert-title" id="weatherAlertTitle">Weather Alert</div>
+            <div class="weather-alert-details" id="weatherAlertDetails"></div>
+            <div>
+                <button class="weather-alert-btn secondary" onclick="dismissWeatherAlert()">Dismiss</button>
+                <button class="weather-alert-btn primary" id="weatherAlertAction" onclick="toggleWeatherForecast()">View Details</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 状态栏 -->
+    <div class="status-bar">
+        <span class="app-title">SnowSafe · GTA</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <div class="weather-indicator loading" id="weatherIndicator" onclick="toggleWeatherForecast()">
+                <span class="wi-icon">🌤</span>
+                <span class="wi-text" id="weatherStatusText">Loading...</span>
+            </div>
+            <div class="data-as-of" id="dataAsOf" title="Last data refresh" style="font-size:11px;color:rgba(255,255,255,0.65);white-space:nowrap;"></div>
+            <div class="connection">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Initializing...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主内容 -->
+    <div class="main-content">
+
+        <!-- 警告横幅 -->
+        <div class="alert-banner" id="alertBanner">
+            <span class="alert-icon">&#9888;</span>
+            <div>
+                <div id="alertTitle">WARNING</div>
+                <div id="alertMsg" style="font-size:12px;font-weight:400;margin-top:1px;"></div>
+            </div>
+        </div>
+
+        <!-- 地图 -->
+        <div class="map-area">
+            <div class="loading-overlay" id="loadingOverlay">
+                <div class="spinner"></div>
+                <div class="loading-text">Loading safety data...</div>
+            </div>
+            <div id="map"></div>
+        </div>
+
+        <!-- 信息面板 -->
+        <div class="info-panel">
+            <div class="info-row">
+                <div class="location-info">
+                    <div class="label">Current Area</div>
+                    <div class="value" id="currentArea">Locating...</div>
+                </div>
+                <div class="risk-badge low" id="riskBadge">SAFE</div>
+            </div>
+            <div class="info-row">
+                <div class="location-info">
+                    <div class="label">Coordinates</div>
+                    <div class="value" id="coords" style="font-size:11px;color:#78909c;">--</div>
+                </div>
+                <div class="location-info" style="text-align:right;">
+                    <div class="label">Nearby Hotspots</div>
+                    <div class="value" id="nearbyCount" style="color:#78909c;">0</div>
+                </div>
+            </div>
+
+            <!-- 附近热点 -->
+            <div class="nearby-section" id="nearbySection" style="display:none;">
+                <div class="nearby-title">Nearby Danger Zones</div>
+                <div id="nearbyList"></div>
+            </div>
+        </div>
+
+        <!-- 自定义路线 -->
+        <div class="sim-routes" id="simRoutes">
+            <div id="routeHint" style="color:#90caf9;font-size:12px;margin-bottom:6px;">Click on the map to add waypoints</div>
+            <div style="display:flex;gap:6px;">
+                <button class="ctrl-btn" id="driveBtn" onclick="startCustomRoute()" style="flex:1;padding:6px;font-size:12px;background:#2e7d32;display:none;">Drive</button>
+                <button class="ctrl-btn" id="clearRouteBtn" onclick="clearCustomRoute()" style="flex:1;padding:6px;font-size:12px;background:#c62828;display:none;">Clear</button>
+            </div>
+        </div>
+
+        <!-- 降雪量选择面板 -->
+        <div class="snowfall-panel" id="snowfallPanel">
+            <div class="snowfall-info" id="snowfallInfo">Select a month to view snowfall impact</div>
+            <div class="snowfall-year-row" id="snowfallYears"></div>
+            <div class="snowfall-month-grid" id="snowfallMonths"></div>
+        </div>
+
+        <!-- 控制栏 -->
+        <div class="controls">
+            <div class="toggle-switch snow-sw" id="snowBtn" onclick="toggleSnow()">
+                <span class="toggle-switch-label">Snow</span>
+                <div class="toggle-switch-track"><div class="toggle-switch-thumb"></div></div>
+            </div>
+            <div class="toggle-switch heat-sw" id="heatBtn" onclick="toggleHeatmap()">
+                <span class="toggle-switch-label">Heatmap</span>
+                <div class="toggle-switch-track"><div class="toggle-switch-thumb"></div></div>
+            </div>
+            <div class="toggle-switch snowfall-sw" id="snowfallBtn" onclick="toggleSnowfall()">
+                <span class="toggle-switch-label">Snowfall</span>
+                <div class="toggle-switch-track"><div class="toggle-switch-thumb"></div></div>
+            </div>
+            <div class="toggle-switch weather-sw" id="weatherBtn" onclick="toggleWeatherForecast()">
+                <span class="toggle-switch-label">Weather</span>
+                <div class="toggle-switch-track"><div class="toggle-switch-thumb"></div></div>
+            </div>
+            <div class="toggle-switch collisions-sw" id="collisionsBtn" onclick="toggleCollisions()">
+                <span class="toggle-switch-label">Collisions</span>
+                <div class="toggle-switch-track"><div class="toggle-switch-thumb"></div></div>
+            </div>
+            <button class="ctrl-btn simulate" id="simBtn" onclick="toggleSimulate()">
+                Test Route
+            </button>
+        </div>
+    </div>
+
+<script>
+// ============================================================
+// SnowSafe App (Phase 2: multi-city)
+// ============================================================
+
+// --- 全局状态 ---
+let appData = null;
+let map = null;
+let userMarker = null;
+let hotspotCircles = [];
+let heatmapLayer = null;
+let heatmapVisible = false;
+let snowfallLayer = null;
+let snowfallVisible = false;
+let selectedSnowfallYear = 2025;
+let selectedSnowfallMonth = null;
+let isSnowing = false;
+let isSimulating = false;
+let simInterval = null;
+let simStep = 0;
+let simAnimFrame = null;
+let simSegStart = 0;
+let simSegDurations = [];    // 每段的时长（ms），按长度比例分配
+const SIM_SPEED = 100;      // 模拟行驶速度 km/h
+let currentLng = -79.38;
+let watchId = null;
+let firstLocationDone = false;  // BUG FIX: 防止 GPS 错误重复触发 flyTo
+let cityMarkers = [];           // 城市标记，按缩放显隐
+let wasHidden = false;          // tab 隐藏标记，防止切回时重新定位
+let isRouteDrawing = false;     // 是否在画路线模式
+let customRoutePoints = [];     // 用户点击的路线坐标
+let routePathLine = null;       // 路线折线
+let routePointMarkers = [];     // 路线点标记
+
+// --- 天气预报 ---
+let weatherEnabled = false;       // 天气预警开关
+let weatherData = null;           // 当前天气数据
+let weatherTimer = null;          // 定时刷新
+let weatherShown = false;         // 是否已显示过天气弹窗
+const WEATHER_REFRESH_MS = 600000; // 10 分钟刷新一次
+const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
+let weatherCircle = null;         // 天气圆圈标记
+let weatherCircles = [];          // 多个天气圆圈（当前+未来）
+let weatherLabels = [];           // 圆圈上的时间标签
+let weatherPanelVisible = false;  // 天气详情面板
+
+// 缓存 DOM 元素引用
+let dom = {};
+
+// --- 碰撞图层（全部城市） ---
+let collisionsLayer = null;       // L.layerGroup 包含所有 circleMarker
+let collisionsVisible = false;    // toggle 状态
+let collisionsLoaded = false;     // 数据是否已 fetch（懒加载）
+let collisionsData = [];          // 合并后的 collision 数组
+const COLLISIONS_CITY_KEYS = [
+    'toronto', 'markham', 'richmond_hill', 'vaughan',
+    'aurora', 'newmarket', 'king', 'georgina', 'whitchurch_stouffville'
+];
+// 用 canvas 渲染器，3万+ marker 才不会卡
+const collisionsRenderer = L.canvas({ padding: 0.5 });
+
+// --- 初始化 ---
+window.addEventListener('DOMContentLoaded', init);
+
+async function init() {
+    // 缓存频繁访问的 DOM 元素
+    dom = {
+        statusDot: document.getElementById('statusDot'),
+        statusText: document.getElementById('statusText'),
+        loadingOverlay: document.getElementById('loadingOverlay'),
+        currentArea: document.getElementById('currentArea'),
+        coords: document.getElementById('coords'),
+        nearbyCount: document.getElementById('nearbyCount'),
+        nearbySection: document.getElementById('nearbySection'),
+        nearbyList: document.getElementById('nearbyList'),
+        alertBanner: document.getElementById('alertBanner'),
+        alertTitle: document.getElementById('alertTitle'),
+        alertMsg: document.getElementById('alertMsg'),
+        riskBadge: document.getElementById('riskBadge'),
+        snowBtn: document.getElementById('snowBtn'),
+        heatBtn: document.getElementById('heatBtn'),
+        snowfallBtn: document.getElementById('snowfallBtn'),
+        weatherBtn: document.getElementById('weatherBtn'),
+        collisionsBtn: document.getElementById('collisionsBtn'),
+        weatherIndicator: document.getElementById('weatherIndicator'),
+        weatherStatusText: document.getElementById('weatherStatusText'),
+        weatherOverlay: document.getElementById('weatherOverlay'),
+        weatherAlertIcon: document.getElementById('weatherAlertIcon'),
+        weatherAlertTitle: document.getElementById('weatherAlertTitle'),
+        weatherAlertDetails: document.getElementById('weatherAlertDetails'),
+        simBtn: document.getElementById('simBtn'),
+        simRoutes: document.getElementById('simRoutes')
+    };
+
+    try {
+        await loadAllCities();
+    } catch (e) {
+        console.error('Failed to load city data:', e);
+        dom.loadingOverlay.className = 'loading-overlay hidden';
+        alert('Could not load city data. Make sure you are serving via http://localhost:8765/ (not file://) and that data/*.json exist.');
+        return;
+    }
+
+    initMap();
+    drawHotspots();
+
+    // Phase 2.5: enable weather by default so the indicator doesn't sit at "Loading..." forever
+    weatherEnabled = true;
+    if (dom.weatherBtn) dom.weatherBtn.classList.add('active');
+    fetchWeather();
+    if (weatherTimer) clearInterval(weatherTimer);
+    weatherTimer = setInterval(fetchWeather, WEATHER_REFRESH_MS);
+
+    startLocationWatch();
+
+    // BUG FIX: 无论 GPS 是否成功，3 秒后自动隐藏加载动画
+    setTimeout(function() {
+        dom.loadingOverlay.className = 'loading-overlay hidden';
+    }, 3000);
+}
+
+// --- Data loader (Phase 2.5: merge all GTA cities into one view) ---
+const ALL_CITY_KEYS = ['toronto', 'markham', 'richmond_hill', 'vaughan', 'aurora', 'newmarket', 'king', 'georgina', 'whitchurch_stouffville'];
+const GTA_CENTER = { lat: 43.95, lng: -79.40 };
+const GTA_DEFAULT_ZOOM = 10;
+let EMBEDDED_DATA = null;
+
+function parseGeneratedAt(s) {
+    if (!s) return null;
+    // Data files historically had malformed "+00:00Z" (offset AND Z). Strip the redundant Z.
+    const cleaned = String(s).replace(/([+-]\d{2}:\d{2})Z$/, '$1');
+    const d = new Date(cleaned);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function updateDataAsOf() {
+    const el = document.getElementById('dataAsOf');
+    if (!el) return;
+    if (!EMBEDDED_DATA || !EMBEDDED_DATA.generated_at) {
+        el.textContent = '';
+        return;
+    }
+    const d = parseGeneratedAt(EMBEDDED_DATA.generated_at);
+    el.textContent = '\u23f1 ' + (d ? d.toLocaleString() : EMBEDDED_DATA.generated_at);
+}
+
+async function loadAllCities() {
+    const results = await Promise.all(
+        ALL_CITY_KEYS.map(async key => {
+            try {
+                const resp = await fetch('data/' + key + '.json');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                data._city_key = key;
+                return data;
+            } catch (e) {
+                console.error('Failed to load data/' + key + '.json:', e);
+                return null;
+            }
+        })
+    );
+    const valid = results.filter(r => r !== null);
+    if (valid.length === 0) {
+        throw new Error('No city data files could be loaded');
+    }
+    // Merge: concatenate hotspots/neighbourhoods, take shared fields from first
+    const sortedByGen = valid.slice().sort((a, b) =>
+        String(b.generated_at || '').localeCompare(String(a.generated_at || ''))
+    );
+    const merged = {
+        hotspots: valid.flatMap(d => d.hotspots || []),
+        neighbourhoods: valid.flatMap(d => d.neighbourhoods || []),
+        snowfall_monthly: valid[0].snowfall_monthly || [],
+        alert_radius_m: valid[0].alert_radius_m || 300,
+        city_center: GTA_CENTER,
+        generated_at: sortedByGen[0].generated_at || null
+    };
+    EMBEDDED_DATA = merged;
+    appData = merged;
+    updateDataAsOf();
+    console.log('Loaded ' + valid.length + ' cities: ' + merged.hotspots.length + ' hotspots, ' + merged.neighbourhoods.length + ' neighbourhoods');
+}
+
+// --- 加载数据 ---
+// (loadAppData removed in Phase 2 — loadAllCities() sets both EMBEDDED_DATA and appData)
+
+// --- 初始化地图 ---
+function initMap() {
+    map = L.map('map', {
+        zoomControl: true,
+        attributionControl: false,
+        zoomSnap: 0
+    }).setView([45.0, -95.0], 4);
+
+    // 浅色底图（低缩放级别下显示国界/城市）
+    const lightTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19
+    }).addTo(map);
+
+    // 深色底图（高缩放级别切换）— 不自动挂载，按需加载
+    const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19
+    });
+
+    // 根据缩放级别自动切换底图 + 显隐城市标记（debounce 避免连续缩放时闪烁）
+    let zoomDebounce = null;
+    let currentTileMode = 'light'; // 追踪当前瓦片模式，避免重复设 opacity
+    let currentCityVisible = true;
+    let currentHotspotVisible = false;
+
+    function applyZoomUI() {
+        const z = map.getZoom();
+
+        // 底图切换 — 先挂新层，新层加载完再移旧层，避免闪白
+        if (z <= 9 && currentTileMode !== 'light') {
+            if (!map.hasLayer(lightTiles)) {
+                lightTiles.addTo(map);
+                // 新层加载完成后移除旧层
+                lightTiles.once('load', function() { map.removeLayer(darkTiles); });
+                setTimeout(function() { if (map.hasLayer(darkTiles)) map.removeLayer(darkTiles); }, 800);
+            }
+            currentTileMode = 'light';
+        } else if (z > 9 && currentTileMode !== 'dark') {
+            if (!map.hasLayer(darkTiles)) {
+                darkTiles.addTo(map);
+                darkTiles.once('load', function() { map.removeLayer(lightTiles); });
+                setTimeout(function() { if (map.hasLayer(lightTiles)) map.removeLayer(lightTiles); }, 800);
+            }
+            currentTileMode = 'dark';
+        }
+
+        // 城市标记显隐（zoom > 8 时隐藏）— 用 opacity 避免 DOM 抖动
+        const showCities = z <= 8;
+        if (showCities !== currentCityVisible) {
+            cityMarkers.forEach(m => m.setOpacity(showCities ? 1 : 0));
+            currentCityVisible = showCities;
+        }
+
+        // 热点圆圈 — 用 opacity 避免频繁 add/remove
+        const showHotspots = z > 10;
+        if (showHotspots !== currentHotspotVisible) {
+            hotspotCircles.forEach(c => c.setStyle({ opacity: showHotspots ? 1 : 0, fillOpacity: showHotspots ? 0.35 : 0 }));
+            currentHotspotVisible = showHotspots;
+        }
+    }
+
+    map.on('zoomend', function() {
+        if (wasHidden) {
+            wasHidden = false;
+            return;
+        }
+        // 丝滑缩放进行中完全跳过，等停止后再更新 UI
+        if (isSmoothZooming) return;
+        if (zoomDebounce) clearTimeout(zoomDebounce);
+        zoomDebounce = setTimeout(applyZoomUI, 150);
+    });
+
+    // 监听 tab 显示/隐藏，防止切回时重新定位
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            wasHidden = true;
+        } else {
+            // tab 重新可见时只刷新瓦片渲染，不重新定位
+            setTimeout(function() {
+                if (map) map.invalidateSize({ animate: false });
+            }, 100);
+        }
+    });
+
+    // ===== 自定义丝滑滚轮缩放（替代 Leaflet 默认） =====
+    // 关闭 Leaflet 默认的滚轮缩放，改用手动 setZoomAround 实现逐像素丝滑缩放
+    map.scrollWheelZoom.disable();
+
+    let smoothTargetZoom = map.getZoom();   // 目标缩放值（小数）
+    let smoothRafId = null;                  // requestAnimationFrame ID
+    let smoothWheelTimer = null;             // 滚轮停止检测
+    let isSmoothZooming = false;             // 丝滑缩放进行中标志
+    const ZOOM_FACTOR = 0.006;              // 每 deltaY 像素对应的缩放增量
+    const MIN_ZOOM = 2;
+    const MAX_ZOOM = 18;
+
+    map.getContainer().addEventListener('wheel', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // 标记正在丝滑缩放
+        if (!isSmoothZooming) {
+            isSmoothZooming = true;
+            // 每次滚轮缩放开始时，从地图取真实 zoom 作为基准
+            smoothTargetZoom = map.getZoom();
+        }
+
+        // 标准化 deltaY：deltaMode 1=行(×40) 2=页(×800)，0=像素(不变)
+        let dy = e.deltaY;
+        if (e.deltaMode === 1) dy *= 40;
+        else if (e.deltaMode === 2) dy *= 800;
+
+        // 根据滚动距离更新目标缩放值
+        smoothTargetZoom -= dy * ZOOM_FACTOR;
+        smoothTargetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, smoothTargetZoom));
+
+        // 保存鼠标在容器中的位置（缩放中心点）
+        const rect = map.getContainer().getBoundingClientRect();
+        const point = L.point(e.clientX - rect.left, e.clientY - rect.top);
+
+        // 用 rAF 限制渲染频率到 60fps
+        if (!smoothRafId) {
+            smoothRafId = requestAnimationFrame(function() {
+                map.setZoomAround(point, smoothTargetZoom, { animate: false });
+                smoothRafId = null;
+            });
+        }
+
+        // 滚轮停止 200ms 后：同步状态 + 更新 UI
+        if (smoothWheelTimer) clearTimeout(smoothWheelTimer);
+        smoothWheelTimer = setTimeout(function() {
+            smoothTargetZoom = map.getZoom();
+            isSmoothZooming = false;
+            applyZoomUI();
+        }, 200);
+    }, { passive: false });
+
+    // 地图点击事件 — 用于自定义路线画点
+    map.on('click', handleMapClickForRoute);
+
+    // 用户位置标记
+    const userIcon = L.divIcon({
+        className: '',
+        html: '<div style="width:16px;height:16px;background:#42a5f5;border:3px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(66,165,245,0.6);"></div>',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+    });
+
+    userMarker = L.marker([43.70, -79.38], {icon: userIcon}).addTo(map);
+    userMarker.setOpacity(0);
+
+    // 添加主要城市标记（北美全景视图用）
+    const cities = [
+        {name: "Toronto", lat: 43.70, lng: -79.38},
+        {name: "Ottawa", lat: 45.42, lng: -75.70},
+        {name: "Montreal", lat: 45.50, lng: -73.57},
+        {name: "Vancouver", lat: 49.28, lng: -123.12},
+        {name: "Calgary", lat: 51.05, lng: -114.07},
+        {name: "Edmonton", lat: 53.55, lng: -113.49},
+        {name: "Winnipeg", lat: 49.90, lng: -97.14},
+        {name: "New York", lat: 40.71, lng: -74.01},
+        {name: "Chicago", lat: 41.88, lng: -87.63},
+        {name: "Los Angeles", lat: 34.05, lng: -118.24},
+        {name: "Detroit", lat: 42.33, lng: -83.05},
+        {name: "Seattle", lat: 47.61, lng: -122.33},
+        {name: "Boston", lat: 42.36, lng: -71.06},
+        {name: "Washington D.C.", lat: 38.91, lng: -77.04},
+        {name: "Minneapolis", lat: 44.98, lng: -93.27},
+        {name: "Buffalo", lat: 42.89, lng: -78.88}
+    ];
+
+    const cityIcon = L.divIcon({
+        className: '',
+        html: '<div style="width:6px;height:6px;background:#64b5f6;border-radius:50%;"></div>',
+        iconSize: [6, 6], iconAnchor: [3, 3]
+    });
+
+    cities.forEach(c => {
+        const marker = L.marker([c.lat, c.lng], {icon: cityIcon}).addTo(map)
+            .bindTooltip(c.name, {
+                permanent: false,
+                direction: 'top',
+                className: 'city-tooltip',
+                offset: [0, -4]
+            });
+        cityMarkers.push(marker);
+    });
+
+}
+
+// --- 在地图上画热点 ---
+function drawHotspots() {
+    if (!appData) return;
+
+    // Phase 2: clear previous city's layers before drawing new ones
+    hotspotCircles.forEach(c => map.removeLayer(c));
+    hotspotCircles = [];
+    if (heatmapLayer) {
+        map.removeLayer(heatmapLayer);
+        heatmapLayer = null;
+    }
+
+    // BUG FIX: maxSev 只算一次，不在循环里重复计算
+    const maxSev = Math.max(...appData.hotspots.map(s => s.severity));
+
+    appData.hotspots.forEach(spot => {
+        const ratio = spot.severity / maxSev;
+        const color = ratio > 0.7 ? '#f44336' : ratio > 0.4 ? '#ff9800' : '#ffc107';
+        const radius = 80 + ratio * 150;
+
+        const circle = L.circle([spot.lat, spot.lng], {
+            radius: radius,
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.15,
+            weight: 1,
+            opacity: 0.4
+        }).addTo(map);
+
+        circle.bindPopup(
+            '<div style="font-family:Arial;min-width:160px;">' +
+            '<b>' + spot.neighbourhood + '</b><br>' +
+            '<span style="color:#f44336;">Collisions: ' + spot.collisions + '</span><br>' +
+            'Injuries: ' + spot.injuries + ' | Pedestrian: ' + spot.pedestrian + '<br>' +
+            '<small>Severity Score: ' + spot.severity + '</small>' +
+            '</div>'
+        );
+
+        hotspotCircles.push(circle);
+    });
+
+    // 初始 zoom 4 <= 10，热点应不可见
+    hotspotCircles.forEach(c => c.setStyle({ opacity: 0, fillOpacity: 0 }));
+
+    createHeatmap(maxSev);
+}
+
+// --- 创建热力图层 ---
+function createHeatmap(maxSev) {
+    if (!appData) return;
+
+    // 确定性伪随机函数
+    function seededRandom(seed) {
+        var x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
+    }
+
+    const heatData = [];
+
+    // 主热点数据：加抖动打破 0.005° 网格对齐，并在周围撒偏移点
+    appData.hotspots.forEach(function(spot, idx) {
+        var baseW = spot.severity / maxSev;
+        // 给网格坐标加小抖动（±0.001-0.002°），消除十字纹
+        var jitterLat = (seededRandom(idx * 500 + 7) - 0.5) * 0.003;
+        var jitterLng = (seededRandom(idx * 500 + 13) - 0.5) * 0.003;
+        var jLat = spot.lat + jitterLat;
+        var jLng = spot.lng + jitterLng;
+        heatData.push([jLat, jLng, baseW]);
+
+        // 每个热点周围撒 5 个偏移点，填补网格间隙
+        for (var i = 0; i < 5; i++) {
+            var angle = seededRandom(idx * 100 + i) * Math.PI * 2;
+            var dist = 0.0015 + seededRandom(idx * 200 + i) * 0.003;
+            var dlat = Math.cos(angle) * dist;
+            var dlng = Math.sin(angle) * dist;
+            var subW = baseW * (0.3 + seededRandom(idx * 300 + i) * 0.5);
+            heatData.push([jLat + dlat, jLng + dlng, subW]);
+        }
+    });
+
+    // 社区点：加抖动 + 散布子点
+    appData.neighbourhoods.forEach(function(h, idx) {
+        var w = Math.min(h.risk_multiplier / 2.0, 1.0);
+        if (w <= 0.3) return;
+
+        var jitterLat = (seededRandom(idx * 600 + 11) - 0.5) * 0.002;
+        var jitterLng = (seededRandom(idx * 600 + 17) - 0.5) * 0.002;
+        heatData.push([h.lat + jitterLat, h.lng + jitterLng, w]);
+
+        for (var i = 0; i < 8; i++) {
+            var angle = seededRandom(idx * 100 + i) * Math.PI * 2;
+            var dist = 0.002 + seededRandom(idx * 200 + i) * 0.003;
+            var dlat = Math.cos(angle) * dist;
+            var dlng = Math.sin(angle) * dist;
+            var subW = w * (0.3 + seededRandom(idx * 300 + i) * 0.4);
+            heatData.push([h.lat + jitterLat + dlat, h.lng + jitterLng + dlng, subW]);
+        }
+    });
+
+    heatmapLayer = L.heatLayer(heatData, {
+        radius: 25,
+        blur: 28,
+        maxZoom: 15,
+        max: 1.0,
+        gradient: {
+            0.0: '#0000ff',
+            0.2: '#00bfff',
+            0.4: '#00ff00',
+            0.6: '#ffff00',
+            0.8: '#ff8c00',
+            1.0: '#ff0000'
+        }
+    });
+}
+
+// --- 热力图开关 ---
+function toggleHeatmap() {
+    heatmapVisible = !heatmapVisible;
+
+    if (heatmapVisible) {
+        // 关闭降雪热力图（互斥）
+        if (snowfallVisible) toggleSnowfall();
+        if (heatmapLayer) heatmapLayer.addTo(map);
+        dom.heatBtn.classList.add('active');
+    } else {
+        if (heatmapLayer) map.removeLayer(heatmapLayer);
+        dom.heatBtn.classList.remove('active');
+    }
+}
+
+// --- 全量碰撞图层 ---
+async function toggleCollisions() {
+    collisionsVisible = !collisionsVisible;
+    if (collisionsVisible) {
+        dom.collisionsBtn.classList.add('active');
+        dom.statusText.textContent = 'Loading collisions…';
+        if (!collisionsLoaded) {
+            try {
+                await loadAllCollisions();
+                collisionsLoaded = true;
+            } catch (e) {
+                console.error('Failed to load collisions:', e);
+                collisionsVisible = false;
+                dom.collisionsBtn.classList.remove('active');
+                dom.statusText.textContent = 'Collisions load failed';
+                return;
+            }
+        }
+        drawCollisions();
+        dom.statusText.textContent = 'Ready';
+    } else {
+        if (collisionsLayer) map.removeLayer(collisionsLayer);
+        dom.collisionsBtn.classList.remove('active');
+    }
+}
+
+async function loadAllCollisions() {
+    const results = await Promise.all(
+        COLLISIONS_CITY_KEYS.map(async key => {
+            try {
+                const resp = await fetch('data/' + key + '_collisions.json');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const j = await resp.json();
+                return j.collisions || [];
+            } catch (e) {
+                console.error('Failed to load data/' + key + '_collisions.json:', e);
+                return [];
+            }
+        })
+    );
+    collisionsData = results.flat();
+    console.log('Loaded ' + collisionsData.length + ' collision records');
+}
+
+// 按碰撞类型选颜色：行人 > 受伤 > 雪天 > 普通
+function colorForCollision(c) {
+    if (c.p) return '#ff8c1a';   // 行人 — 橙
+    if (c.i) return '#e63946';   // 受伤 — 红
+    if (c.s) return '#3da5d9';   // 雪天 — 蓝
+    return '#9aa0a6';            // 普通 — 灰
+}
+
+function drawCollisions() {
+    if (collisionsLayer) map.removeLayer(collisionsLayer);
+    collisionsLayer = L.layerGroup();
+    const monthNames = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    for (const c of collisionsData) {
+        const m = L.circleMarker([c.lat, c.lng], {
+            radius: c.i || c.p ? 4 : 3,
+            color: c.p ? '#ff8c1a' : (c.i ? '#e63946' : 'transparent'),
+            weight: c.p || c.i ? 1 : 0,
+            fillColor: colorForCollision(c),
+            fillOpacity: 0.7,
+            renderer: collisionsRenderer,
+        });
+        const flags = [];
+        if (c.s) flags.push('Snow month');
+        if (c.i) flags.push('Injury');
+        if (c.p) flags.push('Pedestrian');
+        if (c.c) flags.push('Cyclist');
+        m.bindPopup(
+            '<b>Collision ' + c.y + ' ' + monthNames[c.m] + '</b><br>' +
+            (flags.length ? flags.join(' · ') : 'Property damage only') +
+            '<br><span style="color:#666;font-size:11px">' +
+            c.lat.toFixed(4) + ', ' + c.lng.toFixed(4) + '</span>'
+        );
+        collisionsLayer.addLayer(m);
+    }
+    collisionsLayer.addTo(map);
+}
+
+// --- 降雪量热力图 ---
+function toggleSnowfall() {
+    snowfallVisible = !snowfallVisible;
+    const panel = document.getElementById('snowfallPanel');
+
+    if (snowfallVisible) {
+        // 关闭碰撞热力图（互斥）
+        if (heatmapVisible) toggleHeatmap();
+        panel.className = 'snowfall-panel active';
+        dom.snowfallBtn.classList.add('active');
+        buildSnowfallUI();
+    } else {
+        panel.className = 'snowfall-panel';
+        dom.snowfallBtn.classList.remove('active');
+        removeSnowfallLayer();
+    }
+}
+
+function buildSnowfallUI() {
+    if (!appData || !appData.snowfall_monthly) return;
+
+    // 提取可用年份
+    const years = [];
+    const seen = {};
+    appData.snowfall_monthly.forEach(r => {
+        if (!seen[r.y]) { seen[r.y] = true; years.push(r.y); }
+    });
+    years.sort((a, b) => b - a);
+
+    // 年份按钮
+    const yearsDiv = document.getElementById('snowfallYears');
+    yearsDiv.innerHTML = '';
+    years.forEach(y => {
+        const btn = document.createElement('button');
+        btn.className = 'snowfall-yr-btn' + (y === selectedSnowfallYear ? ' active' : '');
+        btn.textContent = y;
+        btn.onclick = function() {
+            selectedSnowfallYear = y;
+            selectedSnowfallMonth = null;
+            buildSnowfallUI();
+            removeSnowfallLayer();
+            document.getElementById('snowfallInfo').textContent = 'Select a month to view snowfall impact';
+        };
+        yearsDiv.appendChild(btn);
+    });
+
+    // 月份按钮
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthsDiv = document.getElementById('snowfallMonths');
+    monthsDiv.innerHTML = '';
+
+    // 查找该年数据
+    const yearData = {};
+    appData.snowfall_monthly.forEach(r => {
+        if (r.y === selectedSnowfallYear) yearData[r.m] = r;
+    });
+
+    monthNames.forEach((name, idx) => {
+        const m = idx + 1;
+        const rec = yearData[m];
+        const cm = rec ? rec.cm : 0;
+        const btn = document.createElement('button');
+        btn.className = 'snowfall-m-btn' +
+            (cm === 0 ? ' zero' : '') +
+            (selectedSnowfallMonth === m ? ' active' : '');
+        btn.textContent = name + (cm > 0 ? ' ' + cm : '');
+        btn.onclick = function() {
+            selectedSnowfallMonth = m;
+            // 更新选中状态
+            monthsDiv.querySelectorAll('.snowfall-m-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            showSnowfallMonth(selectedSnowfallYear, m);
+        };
+        monthsDiv.appendChild(btn);
+    });
+}
+
+function showSnowfallMonth(year, month) {
+    if (!appData || !appData.snowfall_monthly) return;
+
+    const rec = appData.snowfall_monthly.find(r => r.y === year && r.m === month);
+    const cm = rec ? rec.cm : 0;
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    if (cm === 0) {
+        document.getElementById('snowfallInfo').textContent =
+            monthNames[month - 1] + ' ' + year + ': No snowfall';
+        removeSnowfallLayer();
+        return;
+    }
+
+    document.getElementById('snowfallInfo').textContent =
+        monthNames[month - 1] + ' ' + year + ': ' + cm + ' cm snowfall';
+
+    // 找最大降雪量（用于归一化）
+    const maxCm = Math.max(...appData.snowfall_monthly.map(r => r.cm));
+
+    removeSnowfallLayer();
+    createSnowfallLayer(cm, maxCm);
+}
+
+function removeSnowfallLayer() {
+    if (snowfallLayer) {
+        map.removeLayer(snowfallLayer);
+        snowfallLayer = null;
+    }
+}
+
+function createSnowfallLayer(snowCm, maxCm) {
+    if (!appData) return;
+
+    const snowFactor = snowCm / maxCm;
+
+    function seededRandom(seed) {
+        var x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
+    }
+
+    const heatData = [];
+
+    appData.neighbourhoods.forEach(function(h, idx) {
+        // 影响指数 = risk_multiplier * 降雪比例
+        var w = Math.min(h.risk_multiplier * snowFactor, 1.0);
+        if (w < 0.1) return;
+
+        var jitterLat = (seededRandom(idx * 600 + 11) - 0.5) * 0.002;
+        var jitterLng = (seededRandom(idx * 600 + 17) - 0.5) * 0.002;
+        heatData.push([h.lat + jitterLat, h.lng + jitterLng, w]);
+
+        for (var i = 0; i < 8; i++) {
+            var angle = seededRandom(idx * 100 + i) * Math.PI * 2;
+            var dist = 0.002 + seededRandom(idx * 200 + i) * 0.003;
+            var dlat = Math.cos(angle) * dist;
+            var dlng = Math.sin(angle) * dist;
+            var subW = w * (0.3 + seededRandom(idx * 300 + i) * 0.4);
+            heatData.push([h.lat + jitterLat + dlat, h.lng + jitterLng + dlng, subW]);
+        }
+    });
+
+    snowfallLayer = L.heatLayer(heatData, {
+        radius: 30,
+        blur: 35,
+        maxZoom: 15,
+        max: 1.0,
+        gradient: {
+            0.0: 'rgba(0,0,0,0)',
+            0.15: '#0d47a1',
+            0.3: '#1565c0',
+            0.5: '#42a5f5',
+            0.7: '#90caf9',
+            0.85: '#e3f2fd',
+            1.0: '#ffffff'
+        }
+    }).addTo(map);
+}
+
+// ============================================================
+// 天气预报预警系统
+// ============================================================
+
+// WMO 天气代码描述
+const WMO_CODES = {
+    0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+    45: 'Fog', 48: 'Rime fog',
+    51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
+    56: 'Freezing drizzle', 57: 'Dense freezing drizzle',
+    61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+    66: 'Freezing rain', 67: 'Heavy freezing rain',
+    71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow',
+    77: 'Snow grains',
+    80: 'Rain showers', 81: 'Moderate showers', 82: 'Violent showers',
+    85: 'Snow showers', 86: 'Heavy snow showers',
+    95: 'Thunderstorm', 96: 'Thunderstorm + hail', 99: 'Thunderstorm + heavy hail'
+};
+
+// 天气图标映射
+const WEATHER_ICONS = {
+    rain: '🌧️', snow: '🌨️', wind: '💨', fog: '🌫️',
+    thunder: '⛈️', ice: '🧊', clear: '☀️', cloud: '☁️',
+    alert: '⚠️', danger: '🔴'
+};
+
+// 判断天气是否影响驾驶安全
+function analyzeWeatherRisk(hourly) {
+    if (!hourly) return { level: 'clear', hazards: [], current: null, upcoming: [] };
+
+    const now = new Date();
+    const nowStr = now.getFullYear() + '-' +
+        String(now.getMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getDate()).padStart(2, '0') + 'T' +
+        String(now.getHours()).padStart(2, '0');
+
+    // 找到当前小时和未来 6 小时的索引
+    let currentIdx = -1;
+    for (let i = 0; i < hourly.time.length; i++) {
+        if (hourly.time[i] === nowStr) { currentIdx = i; break; }
+    }
+    // 如果找不到精确匹配，取最接近的
+    if (currentIdx === -1) currentIdx = 0;
+
+    const hazards = [];
+    const upcoming = [];
+
+    // 检查未来 6 小时
+    for (let i = currentIdx; i < Math.min(currentIdx + 7, hourly.time.length); i++) {
+        const rain = hourly.rain[i] || 0;
+        const snow = hourly.snowfall[i] || 0;
+        const code = hourly.weathercode[i] || 0;
+        const wind = hourly.windspeed_10m[i] || 0;
+        const vis = hourly.visibility[i] || 24000;
+        const temp = hourly.temperature_2m[i] || 20;
+        const prob = hourly.precipitation_probability[i] || 0;
+        const hoursAhead = i - currentIdx;
+        const timeLabel = hoursAhead === 0 ? 'Now' : (hoursAhead === 1 ? 'In 1 hour' : 'In ' + hoursAhead + ' hours');
+
+        const hourHazards = [];
+
+        // 下雨检测
+        if (rain > 2.5) {
+            hourHazards.push({ type: 'rain', severity: 'high', msg: 'Heavy rain ' + rain.toFixed(1) + ' mm/h' });
+        } else if (rain > 0.5) {
+            hourHazards.push({ type: 'rain', severity: 'moderate', msg: 'Rain ' + rain.toFixed(1) + ' mm/h' });
+        }
+
+        // 下雪检测
+        if (snow > 1.0) {
+            hourHazards.push({ type: 'snow', severity: 'high', msg: 'Heavy snow ' + snow.toFixed(1) + ' cm/h' });
+        } else if (snow > 0.2) {
+            hourHazards.push({ type: 'snow', severity: 'moderate', msg: 'Snow ' + snow.toFixed(1) + ' cm/h' });
+        }
+
+        // 冻雨/冰（code 56,57,66,67）
+        if ([56, 57, 66, 67].includes(code)) {
+            hourHazards.push({ type: 'ice', severity: 'high', msg: 'Freezing precipitation - BLACK ICE RISK' });
+        }
+
+        // 大风
+        if (wind > 60) {
+            hourHazards.push({ type: 'wind', severity: 'high', msg: 'Dangerous wind ' + Math.round(wind) + ' km/h' });
+        } else if (wind > 40) {
+            hourHazards.push({ type: 'wind', severity: 'moderate', msg: 'Strong wind ' + Math.round(wind) + ' km/h' });
+        }
+
+        // 低能见度
+        if (vis < 1000) {
+            hourHazards.push({ type: 'fog', severity: 'high', msg: 'Very low visibility ' + Math.round(vis) + ' m' });
+        } else if (vis < 4000) {
+            hourHazards.push({ type: 'fog', severity: 'moderate', msg: 'Low visibility ' + Math.round(vis) + ' m' });
+        }
+
+        // 雷暴
+        if (code >= 95) {
+            hourHazards.push({ type: 'thunder', severity: 'high', msg: 'Thunderstorm' });
+        }
+
+        if (hourHazards.length > 0) {
+            const entry = { time: timeLabel, timeIdx: i, hazards: hourHazards, code: code, prob: prob };
+            if (hoursAhead === 0) {
+                hazards.push(...hourHazards);
+            } else {
+                upcoming.push(entry);
+            }
+        }
+    }
+
+    // 综合风险等级
+    let level = 'clear';
+    const hasHigh = hazards.some(h => h.severity === 'high') ||
+                    upcoming.some(u => u.hazards.some(h => h.severity === 'high'));
+    const hasModerate = hazards.some(h => h.severity === 'moderate') ||
+                        upcoming.some(u => u.hazards.some(h => h.severity === 'moderate'));
+
+    if (hasHigh) level = 'severe';
+    else if (hasModerate) level = 'moderate';
+
+    // 当前天气概况
+    const currentCode = currentIdx >= 0 ? hourly.weathercode[currentIdx] : 0;
+    const currentTemp = currentIdx >= 0 ? hourly.temperature_2m[currentIdx] : null;
+
+    return {
+        level: level,
+        hazards: hazards,
+        upcoming: upcoming,
+        current: {
+            code: currentCode,
+            desc: WMO_CODES[currentCode] || 'Unknown',
+            temp: currentTemp,
+            rain: currentIdx >= 0 ? hourly.rain[currentIdx] : 0,
+            snow: currentIdx >= 0 ? hourly.snowfall[currentIdx] : 0,
+            wind: currentIdx >= 0 ? hourly.windspeed_10m[currentIdx] : 0,
+            vis: currentIdx >= 0 ? hourly.visibility[currentIdx] : 24000,
+            prob: currentIdx >= 0 ? hourly.precipitation_probability[currentIdx] : 0
+        }
+    };
+}
+
+// 获取天气数据
+async function fetchWeather() {
+    const lat = currentLat || 43.6532;
+    const lng = currentLng || -79.3832;
+
+    const url = WEATHER_API +
+        '?latitude=' + lat +
+        '&longitude=' + lng +
+        '&hourly=rain,snowfall,weathercode,windspeed_10m,visibility,temperature_2m,precipitation_probability' +
+        '&forecast_days=2&timezone=auto';
+
+    try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('API returned ' + resp.status);
+        weatherData = await resp.json();
+        console.log('Weather updated for', lat.toFixed(3), lng.toFixed(3));
+
+        const risk = analyzeWeatherRisk(weatherData.hourly);
+        updateWeatherUI(risk);
+
+        // 如果有危险天气且还没弹过窗，自动弹出
+        if (risk.level !== 'clear' && !weatherShown && weatherEnabled) {
+            weatherShown = true;
+            showWeatherAlert(risk);
+        }
+    } catch (err) {
+        console.error('Weather fetch failed:', err);
+        dom.weatherIndicator.className = 'weather-indicator loading';
+        dom.weatherStatusText.textContent = 'Weather unavailable';
+    }
+}
+
+// 更新状态栏天气指示器
+function updateWeatherUI(risk) {
+    let icon, text, cls;
+
+    if (risk.level === 'severe') {
+        icon = WEATHER_ICONS.danger;
+        text = 'Weather Alert';
+        cls = 'severe';
+    } else if (risk.level === 'moderate') {
+        icon = WEATHER_ICONS.alert;
+        text = 'Weather Caution';
+        cls = 'moderate';
+    } else {
+        icon = WEATHER_ICONS.clear;
+        text = risk.current.temp !== null ? risk.current.temp.toFixed(0) + '°C ' + risk.current.desc : 'Clear';
+        cls = 'clear';
+    }
+
+    dom.weatherIndicator.className = 'weather-indicator ' + cls;
+    dom.weatherIndicator.querySelector('.wi-icon').textContent = icon;
+    dom.weatherStatusText.textContent = text;
+
+    // 更新地图上的天气圆圈
+    updateWeatherCircle(risk);
+}
+
+// 天气危险类型对应的颜色和样式
+const WEATHER_CIRCLE_STYLES = {
+    rain:   { color: '#2196f3', fill: 'rgba(33,150,243,0.15)',  icon: '🌧️', label: 'Rain' },
+    snow:   { color: '#00e5ff', fill: 'rgba(0,229,255,0.12)',   icon: '🌨️', label: 'Snow' },
+    ice:    { color: '#9c27b0', fill: 'rgba(156,39,176,0.15)',  icon: '🧊', label: 'Freezing' },
+    wind:   { color: '#ff8f00', fill: 'rgba(255,143,0,0.12)',   icon: '💨', label: 'Strong Wind' },
+    fog:    { color: '#78909c', fill: 'rgba(120,144,156,0.12)', icon: '🌫️', label: 'Low Visibility' },
+    thunder:{ color: '#f44336', fill: 'rgba(244,67,54,0.15)',   icon: '⛈️', label: 'Thunderstorm' }
+};
+
+function updateWeatherCircle(risk) {
+    // 移除旧的圆圈和标签
+    weatherCircles.forEach(function(c) { map.removeLayer(c); });
+    weatherLabels.forEach(function(l) { map.removeLayer(l); });
+    weatherCircles = [];
+    weatherLabels = [];
+    if (weatherCircle) { map.removeLayer(weatherCircle); weatherCircle = null; }
+
+    closeWeatherDetailPanel();
+
+    if (!weatherEnabled || risk.level === 'clear') return;
+
+    // 计算经纬度偏移：150m ≈ 0.00135° lat，按纬度修正 lng
+    const STEP_DEG = 0.00135;
+    const lngCorrection = 1 / Math.cos(currentLat * Math.PI / 180);
+
+    // 收集要显示的时间段：当前 + 未来 2 小时
+    var slots = [];
+
+    // 当前时段（有活跃危险才画）
+    if (risk.hazards && risk.hazards.length > 0) {
+        var topH = getTopHazard(risk.hazards);
+        slots.push({
+            offsetIdx: 0,
+            label: 'Now',
+            hazard: topH,
+            allHazards: risk.hazards,
+            current: risk.current
+        });
+    }
+
+    // 未来 2 小时
+    if (risk.upcoming) {
+        risk.upcoming.forEach(function(u) {
+            var hoursAhead = u.timeIdx - (risk.current ? risk.current.code : 0);
+            // 只取前 2 小时
+            if (u.timeLabel && u.timeLabel.indexOf('hour') !== -1) {
+                var match = u.timeLabel.match(/(\d+)/);
+                if (match && parseInt(match[1]) <= 2) {
+                    var topH = getTopHazard(u.hazards);
+                    slots.push({
+                        offsetIdx: parseInt(match[1]),
+                        label: '+' + match[1] + 'h',
+                        hazard: topH,
+                        allHazards: u.hazards,
+                        upcoming: u,
+                        current: risk.current
+                    });
+                }
+            }
+        });
+    }
+
+    // 画每个时段的圆圈
+    slots.forEach(function(slot) {
+        var style = WEATHER_CIRCLE_STYLES[slot.hazard.type] || WEATHER_CIRCLE_STYLES.rain;
+        var isHigh = slot.hazard.severity === 'high';
+        var isFuture = slot.offsetIdx > 0;
+
+        // 位置偏移：向东排列
+        var lat = currentLat;
+        var lng = currentLng + slot.offsetIdx * STEP_DEG * lngCorrection;
+
+        var circle = L.circle([lat, lng], {
+            radius: 200,
+            color: style.color,
+            weight: isHigh ? 3 : 2,
+            opacity: isFuture ? Math.max(0.4, 0.8 - slot.offsetIdx * 0.15) : (isHigh ? 0.9 : 0.7),
+            fillColor: style.fill,
+            fillOpacity: isFuture ? Math.max(0.08, 0.2 - slot.offsetIdx * 0.05) : (isHigh ? 0.25 : 0.15),
+            dashArray: isFuture ? '6 4' : null,
+            interactive: true
+        }).addTo(map);
+
+        circle._weatherSlot = slot;
+        circle._weatherStyle = style;
+
+        circle.on('click', function(e) {
+            L.DomEvent.stopPropagation(e);
+            showWeatherDetailPanel(slot, style);
+        });
+
+        weatherCircles.push(circle);
+
+        // 时间标签（圆心上方）
+        var labelMarker = L.marker([lat, lng], {
+            interactive: false,
+            icon: L.divIcon({
+                className: '',
+                html: '<div style="' +
+                    'background:rgba(13,27,42,0.85);' +
+                    'border:1px solid ' + style.color + ';' +
+                    'border-radius:8px;' +
+                    'padding:2px 8px;' +
+                    'font-size:11px;' +
+                    'font-weight:600;' +
+                    'color:' + style.color + ';' +
+                    'white-space:nowrap;' +
+                    'text-align:center;' +
+                    'pointer-events:none;' +
+                    'box-shadow:0 2px 8px rgba(0,0,0,0.4);">' +
+                    style.icon + ' ' + slot.label + '</div>',
+                iconSize: [0, 0],
+                iconAnchor: [30, -8]
+            })
+        }).addTo(map);
+
+        weatherLabels.push(labelMarker);
+    });
+
+    // 如果只有当前时段的圆圈，也赋值给 weatherCircle 保持兼容
+    if (weatherCircles.length > 0) weatherCircle = weatherCircles[0];
+}
+
+// 获取最严重的危险类型
+function getTopHazard(hazards) {
+    if (!hazards || hazards.length === 0) return { type: 'rain', severity: 'moderate' };
+    return hazards.reduce(function(worst, h) {
+        if (h.severity === 'high' && worst.severity !== 'high') return h;
+        return worst;
+    }, hazards[0]);
+}
+
+// 天气详情面板（地图上方浮动）
+// slot 可以是 risk 对象（兼容旧调用）或 slot 对象（圆圈点击）
+function showWeatherDetailPanel(slot, style) {
+    closeWeatherDetailPanel();
+
+    // 兼容：如果传入的是完整的 risk 对象
+    var isSlot = !!slot.offsetIdx;
+    var hazards = isSlot ? slot.allHazards : (slot.hazards || []);
+    var current = slot.current || null;
+    var upcoming = isSlot ? [] : (slot.upcoming || []);
+    var timeLabel = isSlot ? slot.label : 'Now';
+    var severity = isSlot ? slot.hazard.severity : (slot.level || 'moderate');
+
+    var panel = document.createElement('div');
+    panel.id = 'weatherDetailPanel';
+    panel.style.cssText =
+        'position:absolute;bottom:140px;left:50%;transform:translateX(-50%);' +
+        'z-index:800;background:#0d1b2a;border:1px solid ' + style.color + ';' +
+        'border-radius:14px;padding:16px 20px;min-width:280px;max-width:340px;' +
+        'box-shadow:0 4px 24px rgba(0,0,0,0.5);animation:slideUp 0.3s ease;';
+
+    var html = '';
+
+    // 标题栏
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+    html += '<div style="font-size:16px;font-weight:700;color:' + style.color + ';">';
+    html += style.icon + ' ' + style.label + ' <span style="font-size:13px;color:#78909c;">(' + timeLabel + ')</span></div>';
+    html += '<div onclick="closeWeatherDetailPanel()" style="cursor:pointer;color:#78909c;font-size:18px;line-height:1;">✕</div>';
+    html += '</div>';
+
+    // 当前天气概况
+    if (current) {
+        html += '<div style="font-size:12px;color:#90a4ae;margin-bottom:8px;">';
+        html += 'Current: <span style="color:#e0e0e0;">' + current.desc + '</span>';
+        if (current.temp !== null) html += ' · <span style="color:#e0e0e0;">' + current.temp.toFixed(0) + '°C</span>';
+        if (current.wind > 0) html += ' · <span style="color:#e0e0e0;">' + Math.round(current.wind) + ' km/h</span>';
+        html += '</div>';
+    }
+
+    // 危险列表
+    if (hazards.length > 0) {
+        html += '<div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;margin-top:4px;">';
+        hazards.forEach(function(h) {
+            var dotColor = h.severity === 'high' ? '#ef5350' : '#ffa726';
+            html += '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;font-size:12px;">';
+            html += '<span style="width:6px;height:6px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;"></span>';
+            html += '<span style="color:' + dotColor + ';font-weight:600;">' + h.msg + '</span>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+
+    // 如果是未来时段，显示降水概率
+    if (isSlot && slot.upcoming && slot.upcoming.prob > 0) {
+        html += '<div style="font-size:11px;color:#64b5f6;margin-top:6px;">';
+        html += 'Precipitation probability: ' + slot.upcoming.prob + '%';
+        html += '</div>';
+    }
+
+    // 即将来临（仅当前时段才显示）
+    if (!isSlot && upcoming.length > 0) {
+        html += '<div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;margin-top:6px;">';
+        html += '<div style="font-size:11px;color:#78909c;margin-bottom:4px;">UPCOMING</div>';
+        upcoming.slice(0, 3).forEach(function(u) {
+            html += '<div style="font-size:11px;color:#90a4ae;margin:3px 0;">';
+            html += '<span style="color:#e0e0e0;">' + u.timeLabel + '</span>: ';
+            u.hazards.forEach(function(h, i) {
+                if (i > 0) html += ', ';
+                html += h.msg;
+            });
+            if (u.prob > 0) html += ' <span style="color:#64b5f6;">(' + u.prob + '%)</span>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+
+    // 驾驶建议
+    html += '<div style="margin-top:10px;padding:8px 10px;border-radius:8px;' +
+        'background:rgba(255,255,255,0.04);font-size:11px;color:#b0bec5;">';
+    html += '🚗 ';
+    if (severity === 'high' || severity === 'severe') {
+        html += 'Reduce speed, increase distance. Consider alternate route.';
+    } else {
+        html += 'Drive with caution. Watch for changing conditions.';
+    }
+    html += '</div>';
+
+    panel.innerHTML = html;
+    document.querySelector('.map-area').appendChild(panel);
+    weatherPanelVisible = true;
+}
+
+function closeWeatherDetailPanel() {
+    const p = document.getElementById('weatherDetailPanel');
+    if (p) p.remove();
+    weatherPanelVisible = false;
+}
+
+// 显示天气预警弹窗
+function showWeatherAlert(risk) {
+    if (!risk || risk.level === 'clear') return;
+
+    // 图标
+    const topHazard = risk.hazards[0] || (risk.upcoming[0] && risk.upcoming[0].hazards[0]);
+    let icon = WEATHER_ICONS.alert;
+    if (topHazard) {
+        if (topHazard.type === 'rain') icon = WEATHER_ICONS.rain;
+        else if (topHazard.type === 'snow') icon = WEATHER_ICONS.snow;
+        else if (topHazard.type === 'wind') icon = WEATHER_ICONS.wind;
+        else if (topHazard.type === 'fog') icon = WEATHER_ICONS.fog;
+        else if (topHazard.type === 'thunder') icon = WEATHER_ICONS.thunder;
+        else if (topHazard.type === 'ice') icon = WEATHER_ICONS.ice;
+    }
+    dom.weatherAlertIcon.textContent = icon;
+
+    // 标题
+    if (risk.level === 'severe') {
+        dom.weatherAlertTitle.textContent = 'Severe Weather Warning';
+        dom.weatherAlertTitle.style.color = '#ef5350';
+    } else {
+        dom.weatherAlertTitle.textContent = 'Weather Advisory';
+        dom.weatherAlertTitle.style.color = '#ffa726';
+    }
+
+    // 详情
+    let html = '';
+
+    // 当前状况
+    if (risk.current) {
+        html += '<div style="margin-bottom:10px;">';
+        html += 'Current: <span class="info-val">' + risk.current.desc + '</span>';
+        if (risk.current.temp !== null) html += ', <span class="info-val">' + risk.current.temp.toFixed(0) + '°C</span>';
+        html += '</div>';
+    }
+
+    // 当前危险
+    if (risk.hazards.length > 0) {
+        html += '<div style="margin-bottom:8px;color:#ef5350;font-weight:600;">Active Hazards:</div>';
+        risk.hazards.forEach(function(h) {
+            const cls = h.severity === 'high' ? 'highlight' : 'warn';
+            html += '<div style="margin:4px 0;">• <span class="' + cls + '">' + h.msg + '</span></div>';
+        });
+    }
+
+    // 即将到来的危险
+    if (risk.upcoming.length > 0) {
+        html += '<div style="margin-top:10px;margin-bottom:8px;color:#ffa726;font-weight:600;">Upcoming:</div>';
+        risk.upcoming.slice(0, 4).forEach(function(u) {
+            html += '<div style="margin:4px 0;">';
+            html += '<span class="info-val">' + u.time + ':</span> ';
+            u.hazards.forEach(function(h, i) {
+                const cls = h.severity === 'high' ? 'highlight' : 'warn';
+                if (i > 0) html += ', ';
+                html += '<span class="' + cls + '">' + h.msg + '</span>';
+            });
+            if (u.prob > 0) html += ' <span class="info-val">(' + u.prob + '% chance)</span>';
+            html += '</div>';
+        });
+    }
+
+    // 驾驶建议
+    html += '<div style="margin-top:12px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.05);font-size:12px;">';
+    if (risk.level === 'severe') {
+        html += '🚗 <strong>Advice:</strong> Consider delaying travel. If driving, reduce speed significantly and increase following distance.';
+    } else {
+        html += '🚗 <strong>Advice:</strong> Drive with extra caution. Reduce speed and watch for changing conditions.';
+    }
+    html += '</div>';
+
+    dom.weatherAlertDetails.innerHTML = html;
+    dom.weatherOverlay.classList.add('active');
+}
+
+// 关闭弹窗
+function dismissWeatherAlert() {
+    dom.weatherOverlay.classList.remove('active');
+}
+
+// 天气功能开关
+function toggleWeatherForecast() {
+    weatherEnabled = !weatherEnabled;
+
+    if (weatherEnabled) {
+        dom.weatherBtn.classList.add('active');
+        weatherShown = false;
+        fetchWeather();
+        // 定时刷新
+        if (weatherTimer) clearInterval(weatherTimer);
+        weatherTimer = setInterval(fetchWeather, WEATHER_REFRESH_MS);
+    } else {
+        dom.weatherBtn.classList.remove('active');
+        if (weatherTimer) { clearInterval(weatherTimer); weatherTimer = null; }
+        dom.weatherIndicator.className = 'weather-indicator loading';
+        dom.weatherStatusText.textContent = 'Loading...';
+        dismissWeatherAlert();
+        // 清理圆圈和面板
+        if (weatherCircle) { map.removeLayer(weatherCircle); weatherCircle = null; }
+        weatherCircles.forEach(function(c) { map.removeLayer(c); });
+        weatherLabels.forEach(function(l) { map.removeLayer(l); });
+        weatherCircles = [];
+        weatherLabels = [];
+        closeWeatherDetailPanel();
+    }
+}
+function flyToToronto() {
+    // Phase 2.5: GTA-wide view (all cities loaded at once)
+    map.flyTo([GTA_CENTER.lat, GTA_CENTER.lng], GTA_DEFAULT_ZOOM, { duration: 1.5 });
+}
+
+function flyToNorthAmerica() {
+    map.flyTo([45.0, -95.0], 4, { duration: 1.5 });
+}
+
+// --- 定位 ---
+function startLocationWatch() {
+    if ('geolocation' in navigator) {
+        watchId = navigator.geolocation.watchPosition(
+            function(pos) {
+                currentLat = pos.coords.latitude;
+                currentLng = pos.coords.longitude;
+                dom.statusDot.className = 'status-dot';
+                dom.statusText.textContent = 'GPS Active';
+                dom.loadingOverlay.className = 'loading-overlay hidden';
+
+                // 首次定位成功后：飞到用户位置，然后停止 watch
+                if (!firstLocationDone) {
+                    firstLocationDone = true;
+                    updateUserPosition(true);
+                    // 停止持续定位，避免切 tab 后重新触发
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+            },
+            function(err) {
+                if (!firstLocationDone) {
+                    console.log('Geolocation unavailable, using default GTA view.');
+                    firstLocationDone = true;
+                    // Phase 2.5: fly to GTA instead of staying at North America overview
+                    map.flyTo([GTA_CENTER.lat, GTA_CENTER.lng], GTA_DEFAULT_ZOOM, { duration: 1.5 });
+                }
+                dom.statusDot.className = 'status-dot offline';
+                dom.statusText.textContent = 'GPS Unavailable';
+                dom.loadingOverlay.className = 'loading-overlay hidden';
+                // 错误时也停止 watch
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+            },
+            { enableHighAccuracy: true, maximumAge: 5000, timeout: 8000 }
+        );
+    } else {
+        dom.statusText.textContent = 'No GPS';
+        dom.loadingOverlay.className = 'loading-overlay hidden';
+        // Phase 2.5: no geolocation API at all — show GTA view
+        map.flyTo([GTA_CENTER.lat, GTA_CENTER.lng], GTA_DEFAULT_ZOOM, { duration: 1.5 });
+    }
+}
+
+// --- 更新用户位置 ---
+// shouldFly: 是否飞行到用户位置（只在首次定位时飞）
+function updateUserPosition(shouldFly) {
+    if (!appData) return;
+
+    userMarker.setLatLng([currentLat, currentLng]);
+    userMarker.setOpacity(1);
+
+    if (shouldFly) {
+        map.flyTo([currentLat, currentLng], 12, { duration: 1.5 });
+    }
+
+    dom.coords.textContent =
+        currentLat.toFixed(5) + ', ' + currentLng.toFixed(5);
+
+    const nearby = findNearbyHotspots(currentLat, currentLng, 1000);
+    const nearestHood = findNearestNeighbourhood(currentLat, currentLng);
+    dom.currentArea.textContent = nearestHood || 'Unknown Area';
+
+    updateNearbyList(nearby);
+    updateRiskStatus(nearby);
+}
+
+// --- Haversine 距离计算（米） ---
+function haversine(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// --- 查找附近热点 ---
+function findNearbyHotspots(lat, lng, maxDist) {
+    return appData.hotspots
+        .map(spot => ({
+            ...spot,
+            distance: haversine(lat, lng, spot.lat, spot.lng)
+        }))
+        .filter(spot => spot.distance < maxDist)
+        .sort((a, b) => a.distance - b.distance);
+}
+
+// --- 查找最近社区 ---
+function findNearestNeighbourhood(lat, lng) {
+    if (!appData.neighbourhoods.length) return null;
+    let nearest = appData.neighbourhoods[0];
+    let minDist = Infinity;
+    appData.neighbourhoods.forEach(h => {
+        const d = haversine(lat, lng, h.lat, h.lng);
+        if (d < minDist) { minDist = d; nearest = h; }
+    });
+    return nearest.name;
+}
+
+// --- 更新附近热点列表 ---
+function updateNearbyList(nearby) {
+    dom.nearbyCount.textContent = nearby.length;
+
+    if (nearby.length === 0) {
+        dom.nearbySection.style.display = 'none';
+        return;
+    }
+
+    dom.nearbySection.style.display = 'block';
+    dom.nearbyList.innerHTML = nearby.slice(0, 3).map(spot =>
+        '<div class="hotspot-item">' +
+            '<div>' +
+                '<div class="name">' + spot.neighbourhood + '</div>' +
+                '<div class="detail">' + spot.collisions + ' collisions | ' + spot.injuries + ' injuries</div>' +
+            '</div>' +
+            '<div class="dist">' + Math.round(spot.distance) + 'm</div>' +
+        '</div>'
+    ).join('');
+}
+
+// --- 更新风险状态 ---
+function updateRiskStatus(nearby) {
+    const closeHotspots = nearby.filter(s => s.distance < appData.alert_radius_m);
+
+    if (!isSnowing || closeHotspots.length === 0) {
+        dom.alertBanner.className = 'alert-banner';
+        dom.riskBadge.className = 'risk-badge low';
+        dom.riskBadge.textContent = isSnowing ? 'SAFE' : 'NO SNOW';
+        return;
+    }
+
+    const worst = closeHotspots.reduce((a, b) => a.severity > b.severity ? a : b);
+
+    if (worst.severity > 30 || closeHotspots.length >= 3) {
+        dom.alertBanner.className = 'alert-banner active';
+        dom.alertTitle.textContent =
+            'HIGH RISK ZONE - Reduce Speed!';
+        dom.alertMsg.textContent =
+            worst.neighbourhood + ': ' + worst.collisions + ' snow collisions recorded. ' +
+            closeHotspots.length + ' danger zones within 300m.';
+        dom.riskBadge.className = 'risk-badge high';
+        dom.riskBadge.textContent = 'DANGER';
+    } else {
+        dom.alertBanner.className = 'alert-banner active moderate';
+        dom.alertTitle.textContent =
+            'CAUTION - Accident-Prone Area';
+        dom.alertMsg.textContent =
+            worst.neighbourhood + ': ' + worst.collisions + ' snow collisions nearby. Drive carefully.';
+        dom.riskBadge.className = 'risk-badge moderate';
+        dom.riskBadge.textContent = 'CAUTION';
+    }
+}
+
+// --- 下雪开关 ---
+function toggleSnow() {
+    isSnowing = !isSnowing;
+    dom.snowBtn.classList.toggle('active', isSnowing);
+    document.body.style.background = isSnowing ? '#1a1a2e' : '#0a1628';
+
+    const nearby = findNearbyHotspots(currentLat, currentLng, 1000);
+    updateRiskStatus(nearby);
+}
+
+// --- 自定义路线模式 ---
+function toggleSimulate() {
+    if (isSimulating) {
+        stopSimulation();
+    } else if (isRouteDrawing) {
+        // 退出画路线模式
+        isRouteDrawing = false;
+        clearCustomRoute();
+        dom.simBtn.className = 'ctrl-btn simulate';
+        dom.simBtn.textContent = 'Test Route';
+        dom.simRoutes.className = 'sim-routes';
+        map.getContainer().style.cursor = '';
+    } else {
+        // 进入画路线模式
+        isRouteDrawing = true;
+        customRoutePoints = [];
+        dom.simBtn.className = 'ctrl-btn simulate active';
+        dom.simBtn.textContent = 'Cancel';
+        dom.simRoutes.className = 'sim-routes active';
+        document.getElementById('routeHint').textContent = 'Click on the map to add waypoints';
+        document.getElementById('driveBtn').style.display = 'none';
+        document.getElementById('clearRouteBtn').style.display = 'none';
+        map.getContainer().style.cursor = 'crosshair';
+    }
+}
+
+function handleMapClickForRoute(e) {
+    if (!isRouteDrawing || isSimulating) return;
+
+    const latlng = e.latlng;
+    customRoutePoints.push([latlng.lat, latlng.lng]);
+
+    // 画路线点标记
+    const dot = L.circleMarker([latlng.lat, latlng.lng], {
+        radius: 5, color: '#42a5f5', fillColor: '#42a5f5',
+        fillOpacity: 1, weight: 2
+    }).addTo(map);
+    routePointMarkers.push(dot);
+
+    // 画/更新折线
+    if (routePathLine) map.removeLayer(routePathLine);
+    if (customRoutePoints.length >= 2) {
+        routePathLine = L.polyline(customRoutePoints, {
+            color: '#42a5f5', weight: 3, opacity: 0.8, dashArray: '8, 6'
+        }).addTo(map);
+    }
+
+    // 更新提示和按钮
+    const n = customRoutePoints.length;
+    document.getElementById('routeHint').textContent =
+        n + ' point' + (n > 1 ? 's' : '') + ' added' + (n >= 2 ? ' — click Drive or keep adding' : ' — click more to build route');
+
+    if (n >= 2) {
+        document.getElementById('driveBtn').style.display = 'block';
+        document.getElementById('clearRouteBtn').style.display = 'block';
+    }
+}
+
+function clearCustomRoute() {
+    routePointMarkers.forEach(m => map.removeLayer(m));
+    routePointMarkers = [];
+    if (routePathLine) { map.removeLayer(routePathLine); routePathLine = null; }
+    customRoutePoints = [];
+    document.getElementById('routeHint').textContent = 'Click on the map to add waypoints';
+    document.getElementById('driveBtn').style.display = 'none';
+    document.getElementById('clearRouteBtn').style.display = 'none';
+}
+
+function stopSimulation() {
+    isSimulating = false;
+    isRouteDrawing = false;
+    if (simInterval) clearInterval(simInterval);
+    if (simAnimFrame) cancelAnimationFrame(simAnimFrame);
+    simInterval = null;
+    simAnimFrame = null;
+    simStep = 0;
+    dom.simBtn.className = 'ctrl-btn simulate';
+    dom.simBtn.textContent = 'Test Route';
+    dom.simRoutes.className = 'sim-routes';
+    map.getContainer().style.cursor = '';
+    // 清除路线画迹
+    clearCustomRoute();
+}
+
+function startCustomRoute() {
+    if (customRoutePoints.length < 2) return;
+
+    // 退出画路线模式，开始模拟
+    isRouteDrawing = false;
+    isSimulating = true;
+    map.getContainer().style.cursor = '';
+
+    dom.simBtn.className = 'ctrl-btn simulate active';
+    dom.simBtn.textContent = 'Stop';
+    document.getElementById('driveBtn').style.display = 'none';
+    document.getElementById('clearRouteBtn').style.display = 'none';
+    document.getElementById('routeHint').textContent = 'Driving...';
+
+    if (!isSnowing) toggleSnow();
+
+    const route = customRoutePoints;
+    simStep = 0;
+    if (simInterval) clearInterval(simInterval);
+    if (simAnimFrame) cancelAnimationFrame(simAnimFrame);
+
+    // 计算每段的距离（米）和时长（ms），保证全程匀速
+    simSegDurations = [];
+    var totalDist = 0;
+    for (var i = 1; i < route.length; i++) {
+        var d = haversine(route[i-1][0], route[i-1][1], route[i][0], route[i][1]);
+        simSegDurations.push(d);
+        totalDist += d;
+    }
+    // SIM_SPEED km/h → m/ms
+    var speedMm = SIM_SPEED * 1000 / 3600000;
+    for (var i = 0; i < simSegDurations.length; i++) {
+        simSegDurations[i] = simSegDurations[i] / speedMm;
+    }
+
+    // 跳到路线起点
+    currentLat = route[0][0];
+    currentLng = route[0][1];
+    updateUserPosition(true);
+    simStep = 1;
+    simSegStart = performance.now();
+
+    // 平滑插值动画
+    function animateStep(timestamp) {
+        if (!isSimulating) return;
+
+        var segIdx = simStep - 1;
+        if (segIdx >= simSegDurations.length) {
+            stopSimulation();
+            return;
+        }
+
+        var segDur = Math.max(simSegDurations[segIdx], 50); // 最短 50ms 防除零
+        var progress = Math.min((timestamp - simSegStart) / segDur, 1.0);
+        var fromIdx = simStep - 1;
+        var toIdx = simStep;
+
+        if (toIdx >= route.length) {
+            stopSimulation();
+            return;
+        }
+
+        currentLat = route[fromIdx][0] + (route[toIdx][0] - route[fromIdx][0]) * progress;
+        currentLng = route[fromIdx][1] + (route[toIdx][1] - route[fromIdx][1]) * progress;
+        updateUserPosition(false);
+        map.panTo([currentLat, currentLng], { animate: false });
+
+        if (progress >= 1.0) {
+            simStep++;
+            simSegStart = timestamp;
+        }
+
+        simAnimFrame = requestAnimationFrame(animateStep);
+    }
+
+    simAnimFrame = requestAnimationFrame(animateStep);
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,133 @@
+{
+  "_comment": "Single source of truth for SnowSafe city configuration. Each entry drives etl/run_all.py and the in-app city picker.",
+  "_schema": {
+    "key": "machine name, used as filename prefix and URL hash",
+    "display_name_en": "English label shown in UI",
+    "display_name_cn": "Chinese label for bilingual toggle",
+    "lat": "city center latitude (default map center)",
+    "lng": "city center longitude",
+    "default_zoom": "Leaflet zoom level",
+    "data_source": "yrp = York Regional Police ArcGIS, toronto_ckan = Toronto open data CSV",
+    "yrp_municipality": "filter value for YRP API (only yrp cities)",
+    "neighbourhood_oids": "York Region EDI boundary OBJECTIDs (only yrp cities)",
+    "snow_source_city": "city whose snow CSV to reuse (all reuse toronto since GTA climate zone)",
+    "collision_min_year": "filter collision records to >= this year"
+  },
+  "cities": [
+    {
+      "key": "toronto",
+      "display_name_en": "Toronto",
+      "display_name_cn": "多伦多",
+      "lat": 43.6532,
+      "lng": -79.3832,
+      "default_zoom": 11,
+      "data_source": "toronto_ckan",
+      "snow_source_city": "toronto",
+      "collision_min_year": 2014
+    },
+    {
+      "key": "markham",
+      "display_name_en": "Markham",
+      "display_name_cn": "万锦",
+      "lat": 43.856,
+      "lng": -79.337,
+      "default_zoom": 12,
+      "data_source": "yrp",
+      "yrp_municipality": "Markham",
+      "neighbourhood_oids": [3, 14, 16, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 58],
+      "snow_source_city": "toronto",
+      "collision_min_year": 2020
+    },
+    {
+      "key": "richmond_hill",
+      "display_name_en": "Richmond Hill",
+      "display_name_cn": "列治文山",
+      "lat": 43.8717,
+      "lng": -79.4367,
+      "default_zoom": 12,
+      "data_source": "yrp",
+      "yrp_municipality": "Richmond Hill",
+      "neighbourhood_oids": [28, 29, 30, 31, 32, 33, 34, 35],
+      "snow_source_city": "toronto",
+      "collision_min_year": 2020
+    },
+    {
+      "key": "vaughan",
+      "display_name_en": "Vaughan",
+      "display_name_cn": "旺市",
+      "lat": 43.837,
+      "lng": -79.5407,
+      "default_zoom": 12,
+      "data_source": "yrp",
+      "yrp_municipality": "Vaughan",
+      "neighbourhood_oids": [2, 4, 5, 6, 15, 38, 59, 60, 61, 62, 63, 64],
+      "snow_source_city": "toronto",
+      "collision_min_year": 2020
+    },
+    {
+      "key": "aurora",
+      "display_name_en": "Aurora",
+      "display_name_cn": "极光镇",
+      "lat": 44.0,
+      "lng": -79.45,
+      "default_zoom": 12,
+      "data_source": "yrp",
+      "yrp_municipality": "Aurora",
+      "neighbourhood_oids": [7, 8, 9, 10, 11, 12],
+      "snow_source_city": "toronto",
+      "collision_min_year": 2020
+    },
+    {
+      "key": "newmarket",
+      "display_name_en": "Newmarket",
+      "display_name_cn": "新市",
+      "lat": 44.05,
+      "lng": -79.46,
+      "default_zoom": 12,
+      "data_source": "yrp",
+      "yrp_municipality": "Newmarket",
+      "neighbourhood_oids": [23, 51, 52, 53, 54, 55, 56, 57],
+      "snow_source_city": "toronto",
+      "collision_min_year": 2020
+    },
+    {
+      "key": "king",
+      "display_name_en": "King",
+      "display_name_cn": "国王镇",
+      "lat": 43.95,
+      "lng": -79.53,
+      "default_zoom": 12,
+      "data_source": "yrp",
+      "yrp_municipality": "King",
+      "neighbourhood_oids": [1, 24, 37],
+      "snow_source_city": "toronto",
+      "collision_min_year": 2020
+    },
+    {
+      "key": "georgina",
+      "display_name_en": "Georgina",
+      "display_name_cn": "乔治娜",
+      "lat": 44.3,
+      "lng": -79.44,
+      "default_zoom": 11,
+      "data_source": "yrp",
+      "yrp_municipality": "Georgina",
+      "neighbourhood_oids": [18, 19, 20, 22, 25, 27, 36],
+      "snow_source_city": "toronto",
+      "collision_min_year": 2020
+    },
+    {
+      "key": "whitchurch_stouffville",
+      "display_name_en": "Whitchurch-Stouffville",
+      "display_name_cn": "斯托夫维尔",
+      "lat": 43.98,
+      "lng": -79.28,
+      "default_zoom": 12,
+      "data_source": "yrp",
+      "yrp_municipality": "Whitchurch-Stouffville",
+      "neighbourhood_oids": [13, 21],
+      "snow_source_city": "toronto",
+      "collision_min_year": 2020
+    }
+  ]
+}

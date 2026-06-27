@@ -1,0 +1,96 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# --- Raw / large data (regenerate via etl/) ---
+# Toronto's CSV is 167MB — exceeds GitHub's 100MB file limit.
+# York Region CSVs are smaller but stay local; rerun fetch_traffic.py to get them.
+*_traffic_raw.csv
+traffic_collisions_raw.csv
+*_snowfall_monthly.csv
+*_snowfall_yearly.csv
+*_traffic_by_type.csv
+*_traffic_monthly.csv
+*_traffic_yearly.csv
+
+# Intermediate / regenerable artifacts
+*_neighbourhood_snow_risk.csv
+*_street_hotspots.csv
+neighbourhood_snow_risk.csv
+street_hotspots.csv
+aligned_risk_data.csv
+
+# Boundary files (regenerate via etl/fetch_neighbourhoods.py)
+*_neighbourhoods.geojson
+*_neighbourhoods.csv
+
+# --- Build artifacts ---
+dist/
+*.zip
+
+# --- Legacy / backup files ---
+*.bak-pre-phase2
+*_safe_app.html
+drive_safe_app.html
+snow_risk_map.html
+report.html
+
+# --- Phase 1 superseded scripts (kept locally for reference, not pushed) ---
+# Per-city variants consolidated into etl/
+markham_*.py
+rh_*.py
+vaughan_*.py
+aurora_*.py
+newmarket_*.py
+georgina_*.py
+king_*.py
+whitchurch_stouffville_*.py
+toronto_*.py
+# Top-level duplicates now living in etl/
+# Anchor with leading slash so we only ignore root-level copies, not etl/<name>.py
+/fetch_traffic.py
+/fetch_snowfall.py
+/fetch_neighbourhoods_generic.py
+/prepare_app_data.py
+/snow_risk_generic.py
+/snow_risk_heatmap.py
+# Pre-Phase 2 per-city data (now in data/<city>.json)
+*_app_data.json
+app_data.json
+# Orphaned / exploratory artifacts
+cities.meta.json
+README_CN.md
+explore_data.py
+align_data.py
+test_weather_api.py
+visualize_*.py
+correlation_analysis.png
+snow_collision_heatmap.png
+snowfall_monthly.png
+snowfall_yearly.png
+traffic_monthly.png
+traffic_yearly.png
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Local secrets / logs ---
+*.log
+.env
+.env.local
