@@ -22,8 +22,8 @@
 
 ```bash
 # Clone
-git clone https://github.com/YOUR_USERNAME/snowsafe-gta.git
-cd snowsafe-gta
+git clone https://github.com/Little-giraffe07745/GTA-SnowSafe.git
+cd GTA-SnowSafe
 
 # Serve locally (browsers block fetch() on file:// URLs)
 python3 -m http.server 8765
