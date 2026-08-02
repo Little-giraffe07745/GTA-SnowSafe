@@ -82,9 +82,10 @@ def compute_risk_multiplier(df: pd.DataFrame) -> pd.DataFrame:
 
     risk["snow_monthly_avg"] = risk["snow_collisions"] / SNOW_MONTHS
     risk["no_snow_monthly_avg"] = risk["no_snow_collisions"] / NON_SNOW_MONTHS
+    # If no_snow_monthly_avg is 0 but snow_monthly_avg > 0, risk is effectively infinite
     risk["risk_multiplier"] = (
-        risk["snow_monthly_avg"] / risk["no_snow_monthly_avg"].replace(0, 1)
-    ).round(2)
+        risk["snow_monthly_avg"] / risk["no_snow_monthly_avg"].replace(0, np.inf)
+    ).replace([np.inf], [999]).round(2)  # cap at 999 for display
 
     return risk.sort_values("snow_collisions", ascending=False)
 

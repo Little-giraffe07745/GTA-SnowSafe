@@ -11,7 +11,7 @@ Cleaning steps:
   - tag each record with is_snow (same month-had-snow rule as run_pipeline.py)
   - stratified sample per city to keep payload bounded
 
-Output schema (compact keys, ~60 bytes/record):
+Output schema (compact keys, ~55 bytes/record):
     {"lat":43.88593,"lng":-79.36726,"y":25,"m":1,"s":1,"i":0,"p":0,"c":0}
   Keys: lat, lng, year (y), month (m), snow (s), injury (i), ped (p), cyclist (c).
 
@@ -47,7 +47,7 @@ MONTH_NAMES = {
 def _to_bool(series: pd.Series) -> pd.Series:
     """Coerce a YES/Y/TRUE/1 column to 0/1 int."""
     if series is None:
-        return pd.Series([0] * len(series.index) if series is not None else [])
+        return pd.Series([], dtype=int)
     s = series.astype(str).str.strip().str.upper()
     return s.isin(["YES", "Y", "TRUE", "1"]).astype(int)
 
@@ -143,7 +143,7 @@ def stratified_sample(df: pd.DataFrame, cap: int, seed: int = 42) -> pd.DataFram
     if len(df) <= cap:
         return df
     df = df.copy()
-    df["_stratum"] = df["y"].astype(str) + "_" + df["i"].astype(str) + df["p"].astype(str)
+    df["_stratum"] = df["y"].astype(str) + "_" + df["i"].astype(str) + "_" + df["p"].astype(str)
     total = len(df)
     parts = []
     remaining = cap
@@ -151,15 +151,15 @@ def stratified_sample(df: pd.DataFrame, cap: int, seed: int = 42) -> pd.DataFram
     for stratum, n in counts.items():
         quota = cap * n / total  # proportional allocation (float)
         if quota < 1.0:
-            take = min(n, remaining)  # rare: preserve fully
+            take = min(n, remaining)  # rare: preserve fully, but never exceed remaining
         else:
             take = min(n, max(1, round(quota)), remaining)
-        if take <= 0:
-            break
-        parts.append(df[df["_stratum"] == stratum].sample(n=take, random_state=seed))
-        remaining -= take
         if remaining <= 0:
             break
+        if take <= 0:
+            continue  # skip this stratum, try the next one
+        parts.append(df[df["_stratum"] == stratum].sample(n=take, random_state=seed))
+        remaining -= take
     out = pd.concat(parts, ignore_index=True)
     return out.drop(columns=["_stratum"]).reset_index(drop=True)
 
@@ -217,12 +217,14 @@ def main() -> None:
         cities = load_all()
 
     print(f"Exporting collisions for {len(cities)} cities (cap={args.cap}/city)\n")
-    totals = {"exported": 0, "snow": 0, "injury": 0, "ped": 0, "cyc": 0, "kb": 0}
+    totals = {"exported": 0, "snow": 0, "injury": 0, "ped": 0,
+              "cyc": 0, "kb": 0}
     for city in cities:
         r = export_city(city, args.cap)
         print(
             f"  {r['key']:<24} {r['exported']:>6} / {r['total_clean']:>7,} "
-            f"(snow={r['snow']:>4}, injury={r['injury']:>4}, ped={r['ped']:>3}, "
+            f"(snow={r['snow']:>4}, injury={r['injury']:>4}, "
+            f"ped={r['ped']:>3}, "
             f"cyc={r['cyclist']:>3}) → {r['out_path'].name} ({r['size_kb']:,} KB)"
         )
         totals["exported"] += r["exported"]

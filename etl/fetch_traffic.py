@@ -4,7 +4,9 @@ Two backends:
 - `toronto_ckan`: downloads the 175MB Toronto Police CSV once, slices to the
   columns the rest of the pipeline needs, writes `<key>_traffic_raw.csv`.
 - `yrp`: paginated query against York Regional Police ArcGIS FeatureServer,
-  filtered by `municipality='<city>'` from cities.json.
+  filtered by `municipality='<city>'` from cities.json. Dedupes by OBJECTID
+  across pages so the raw CSV doesn't carry the 20–36% duplicate rows that
+  resultOffset pagination produces against this API.
 
 Usage:
     python3 -m etl.fetch_traffic --city markham
@@ -69,6 +71,8 @@ def _parse_yrp_record(feat: dict) -> dict | None:
         ped_raw is True or str(ped_raw).upper() in ("YES", "TRUE", "1", "Y")
     ) else "NO"
 
+    object_id = attr.get("OBJECTID")
+
     return {
         "OCC_YEAR": year,
         "OCC_MONTH": month,
@@ -76,19 +80,30 @@ def _parse_yrp_record(feat: dict) -> dict | None:
         "PEDESTRIAN": pedestrian,
         "LONG_WGS84": x,
         "LAT_WGS84": y,
+        "_OBJECTID": object_id,
     }
 
 
 def fetch_yrp(municipality: str) -> pd.DataFrame:
-    """Paginated YRP ArcGIS query for one municipality."""
-    where = f"municipality='{municipality}'"
+    """Paginated YRP ArcGIS query for one municipality.
+
+    The API returns overlapping pages when resultOffset-based pagination
+    runs against a changing backend snapshot. We dedupe by OBJECTID across
+    pages so the raw CSV doesn't carry 20–36% duplicate rows (observed
+    rates: Vaughan 36%, Markham 19%, RH 20%, Newmarket 24%).
+    """
+    # Escape single quotes to prevent SQL injection via municipality name
+    safe_municipality = municipality.replace("'", "''")
+    where = f"municipality='{safe_municipality}'"
     records: list[dict] = []
+    seen_ids: set = set()
+    dup_count = 0
     offset = 0
 
     while True:
         params = {
             "where": where,
-            "outFields": "occ_date,case_type,InvolvePed,municipality",
+            "outFields": "OBJECTID,occ_date,case_type,InvolvePed,municipality",
             "outSR": "4326",
             "f": "json",
             "resultOffset": offset,
@@ -105,6 +120,7 @@ def fetch_yrp(municipality: str) -> pd.DataFrame:
             break
 
         kept = 0
+        page_dups = 0
         for feat in features:
             rec = _parse_yrp_record(feat)
             if rec is None:
@@ -113,14 +129,29 @@ def fetch_yrp(municipality: str) -> pd.DataFrame:
                 continue
             if not _in_gta(rec["LAT_WGS84"], rec["LONG_WGS84"]):
                 continue
+            oid = rec.pop("_OBJECTID", None)
+            if oid is not None:
+                key = (municipality, oid)
+                if key in seen_ids:
+                    page_dups += 1
+                    dup_count += 1
+                    continue
+                seen_ids.add(key)
             records.append(rec)
             kept += 1
-        print(f" got {len(features)} (kept {kept}, total {len(records)})")
+        msg = f" got {len(features)} (kept {kept}"
+        if page_dups:
+            msg += f", deduped {page_dups}"
+        msg += f", total {len(records)})"
+        print(msg)
 
         if not data.get("exceededTransferLimit"):
             break
         offset += YRP_PAGE_SIZE
         time.sleep(0.3)
+
+    if dup_count:
+        print(f"  fetch-time dedup removed {dup_count:,} duplicate OBJECTIDs")
 
     if not records:
         return pd.DataFrame(columns=["OCC_YEAR", "OCC_MONTH", "INJURY_COLLISIONS",
@@ -143,7 +174,7 @@ def fetch_toronto_ckan(raw_cache_path: str | None = None) -> pd.DataFrame:
         total = int(resp.headers.get("content-length", 0))
         downloaded = 0
         with open(raw_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+            for chunk in resp.iter_content(chunk_size=8 * 1024 * 1024):
                 f.write(chunk)
                 downloaded += len(chunk)
                 if total:

@@ -4,7 +4,7 @@
 
 **SnowSafe** merges ~920k historical traffic collision records across 9 GTA cities (Toronto + 8 York Region municipalities) with monthly snowfall data and live Open-Meteo forecasts, then renders them on a Leaflet map you can drop into your phone's home screen.
 
-![status](https://img.shields.io/badge/status-active-green) ![license](https://img.shields.io/badge/license-MIT-blue) ![python](https://img.shields.io/badge/python-3.10+-blue) ![javascript](https://img.shields.io/badge/javascript-vanilla-yellow)
+![status](https://img.shields.io/badge/status-active-green) ![license](https://img.shields.io/badge/license-MIT-blue) ![python](https://img.shields.io/badge/python-3.10+-blue) ![javascript](https://img.shields.io/badge/javascript-vanilla-yellow) ![tests](https://github.com/<user>/<repo>/actions/workflows/ci.yml/badge.svg)
 
 ---
 
@@ -137,13 +137,13 @@ Tests cover:
 
 ## Roadmap
 
-- [ ] PWA (offline support, install to home screen)
+- [x] PWA (offline support, install to home screen)
 - [ ] Environment Canada official weather warnings
 - [ ] RainViewer precipitation radar overlay
 - [ ] 7-day forecast timeline UI
 - [ ] Dark mode toggle
-- [ ] Unit switcher (°C/°F, km/h/mph)
-- [ ] EN/中文 language toggle
+- [x] Unit switcher (°C/°F, km/h/mph)
+- [x] EN/中文 language toggle
 
 ## Documentation
 

@@ -668,6 +668,7 @@ let snowfallLayer = null;
 let snowfallVisible = false;
 let selectedSnowfallYear = 2025;
 let selectedSnowfallMonth = null;
+let cachedMaxCm = null;  // 缓存月降雪量最大值，避免重复计算
 let isSnowing = false;
 let isSimulating = false;
 let simInterval = null;
@@ -676,6 +677,7 @@ let simAnimFrame = null;
 let simSegStart = 0;
 let simSegDurations = [];    // 每段的时长（ms），按长度比例分配
 const SIM_SPEED = 100;      // 模拟行驶速度 km/h
+let currentLat = -79.38;
 let currentLng = -79.38;
 let watchId = null;
 let firstLocationDone = false;  // BUG FIX: 防止 GPS 错误重复触发 flyTo
@@ -1078,10 +1080,10 @@ function drawHotspots() {
 function createHeatmap(maxSev) {
     if (!appData) return;
 
-    // 确定性伪随机函数
+    // 确定性伪随机函数 (LCG)
     function seededRandom(seed) {
-        var x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
     }
 
     const heatData = [];
@@ -1332,8 +1334,11 @@ function showSnowfallMonth(year, month) {
     document.getElementById('snowfallInfo').textContent =
         monthNames[month - 1] + ' ' + year + ': ' + cm + ' cm snowfall';
 
-    // 找最大降雪量（用于归一化）
-    const maxCm = Math.max(...appData.snowfall_monthly.map(r => r.cm));
+    // 找最大降雪量（用于归一化）- 缓存避免重复计算
+    if (cachedMaxCm === null) {
+        cachedMaxCm = Math.max(...appData.snowfall_monthly.map(r => r.cm));
+    }
+    const maxCm = cachedMaxCm;
 
     removeSnowfallLayer();
     createSnowfallLayer(cm, maxCm);
@@ -1351,9 +1356,10 @@ function createSnowfallLayer(snowCm, maxCm) {
 
     const snowFactor = snowCm / maxCm;
 
+    // 确定性伪随机函数 (LCG)
     function seededRandom(seed) {
-        var x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
     }
 
     const heatData = [];
@@ -1636,7 +1642,6 @@ function updateWeatherCircle(risk) {
     // 未来 2 小时
     if (risk.upcoming) {
         risk.upcoming.forEach(function(u) {
-            var hoursAhead = u.timeIdx - (risk.current ? risk.current.code : 0);
             // 只取前 2 小时
             if (u.timeLabel && u.timeLabel.indexOf('hour') !== -1) {
                 var match = u.timeLabel.match(/(\d+)/);

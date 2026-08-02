@@ -36,8 +36,8 @@ HTML_TEMPLATE = REPO_ROOT / "drive_safe_app.html"
 
 
 def _load_inputs(city_key: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    traffic = pd.read_csv(f"{city_key}_traffic_raw.csv")
-    snow = pd.read_csv(f"{city_key}_snowfall_monthly.csv")
+    traffic = pd.read_csv(REPO_ROOT / f"{city_key}_traffic_raw.csv")
+    snow = pd.read_csv(REPO_ROOT / f"{city_key}_snowfall_monthly.csv")
     snow = snow[["年份", "月份", "降雪量_cm"]].copy()
     traffic = traffic.merge(snow, left_on=["OCC_YEAR", "OCC_MONTH"],
                             right_on=["年份", "月份"], how="left")
@@ -47,8 +47,8 @@ def _load_inputs(city_key: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def _run_risk(city: dict, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    polygons = load_neighbourhood_polygons(f"{city['key']}_neighbourhoods.geojson")
-    centroids_df = pd.read_csv(f"{city['key']}_neighbourhoods.csv")
+    polygons = load_neighbourhood_polygons(str(REPO_ROOT / f"{city['key']}_neighbourhoods.geojson"))
+    centroids_df = pd.read_csv(REPO_ROOT / f"{city['key']}_neighbourhoods.csv")
     centroids = {
         row["name"]: {"lat": row["centroid_lat"], "lng": row["centroid_lng"]}
         for _, row in centroids_df.iterrows()
